@@ -15,7 +15,9 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 
-export default function Home() {
+import { Suspense } from 'react'
+
+function HomeContent() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -339,3 +341,12 @@ export default function Home() {
     </div>
   )
 }
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center bg-background"><Loader2 className="animate-spin text-primary" /></div>}>
+      <HomeContent />
+    </Suspense>
+  )
+}
+

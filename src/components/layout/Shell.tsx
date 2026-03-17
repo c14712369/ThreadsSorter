@@ -1,11 +1,14 @@
 'use client'
 
-import { Plus, Home, Folder, Star, User, LogOut } from 'lucide-react'
+import { ReactNode, Suspense } from 'react'
+import { Plus, Home, Folder, Star, User, LogOut, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import { cn } from '@/lib/utils'
 
-export default function Shell({ children }: { children: React.ReactNode }) {
+function ShellContent({ children }: { children: ReactNode }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentTab = searchParams.get('tab') || 'home'
@@ -63,10 +66,13 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   )
 }
 
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-
-function NavItem({ icon, label, href, active, vertical }: { icon: React.ReactNode, label?: string, href: string, active?: boolean, vertical?: boolean }) {
+export default function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background flex items-center justify-center"><Loader2 className="animate-spin text-primary" /></div>}>
+      <ShellContent>{children}</ShellContent>
+    </Suspense>
+  )
+}function NavItem({ icon, label, href, active, vertical }: { icon: React.ReactNode, label?: string, href: string, active?: boolean, vertical?: boolean }) {
   return (
     <Link 
       href={href}
@@ -81,5 +87,3 @@ function NavItem({ icon, label, href, active, vertical }: { icon: React.ReactNod
     </Link>
   )
 }
-
-import { cn } from '@/lib/utils'
