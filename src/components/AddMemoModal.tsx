@@ -6,9 +6,13 @@ import { Button } from './ui/Button'
 import { Card } from './ui/Card'
 import { supabase } from '@/lib/supabase'
 
-export function AddMemoModal({ isOpen, onClose, onAdd }: { isOpen: boolean, onClose: () => void, onAdd: (data: any) => void }) {
+import { useAuth } from '@/hooks/useAuth'
+
+export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
+  const { user } = useAuth()
   const [url, setUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<any>(null)
   const [imgError, setImgError] = useState(false)
@@ -37,7 +41,6 @@ export function AddMemoModal({ isOpen, onClose, onAdd }: { isOpen: boolean, onCl
     setError('')
     setImgError(false)
     try {
-      // Basic URL validation
       const isThreads = targetUrl.includes('threads.net') || targetUrl.includes('threads.com')
       const isIG = targetUrl.includes('instagram.com')
       if (!isThreads && !isIG) throw new Error('僅支援 Threads 或 Instagram 連結')
@@ -52,7 +55,6 @@ export function AddMemoModal({ isOpen, onClose, onAdd }: { isOpen: boolean, onCl
       setPreview(data)
     } catch (err: any) {
       setError(err.message || '解析失敗')
-      // Switch to manual mode on error
       setPreview({
         author_handle: '',
         content_snippet: '',
@@ -93,12 +95,9 @@ export function AddMemoModal({ isOpen, onClose, onAdd }: { isOpen: boolean, onCl
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'AI 摘要產生失敗')
 
-      // 設定摘要到備註欄位
       setPersonalNote(data.summary)
 
-      // 若有回傳標籤，且資料庫有符合的分類，自動選擇；若無，可考慮之後加新分類邏輯
       if (data.tags && data.tags.length > 0) {
-        // Simple matching: 如果分類名稱包含在 tags 中
         const matchedCategory = categories.find(c => 
           data.tags.some((t: string) => t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase()))
         )
@@ -113,16 +112,33 @@ export function AddMemoModal({ isOpen, onClose, onAdd }: { isOpen: boolean, onCl
     }
   }
 
-  const handleSave = () => {
-    onAdd({
-      ...preview,
-      url: url || preview?.url,
-      category_id: categoryId || null,
-      personal_note: personalNote,
-      is_essential: isEssential,
-      ai_summary: '', // Currently mapped to personal_note for UI simplicity, or you can keep both
-      ai_tags: []
-    })
+  const handleSave = async () => {
+    if (!user || !preview) return
+    setIsSaving(true)
+    setError('')
+
+    const { error: insertError } = await supabase
+      .from('memos')
+      .insert([
+        {
+          user_id: user.id,
+          ...preview,
+          url: url || preview?.url,
+          category_id: categoryId || null,
+          personal_note: personalNote,
+          is_essential: isEssential,
+          ai_tags: [] 
+        }
+      ])
+
+    if (insertError) {
+      setError(insertError.message)
+      setIsSaving(false)
+      return
+    }
+
+    onSuccess()
+    
     // Reset state
     setPreview(null)
     setCategoryId('')
@@ -131,6 +147,8 @@ export function AddMemoModal({ isOpen, onClose, onAdd }: { isOpen: boolean, onCl
     setUrl('')
     setError('')
     setImgError(false)
+    setIsSaving(false)
+    onClose()
   }
 
   if (!isOpen) return null

@@ -19,14 +19,14 @@ function ShellContent({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row">
+    <div className="h-[100dvh] w-full bg-background text-foreground flex flex-col md:flex-row overflow-hidden relative">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-slate-800 p-6 gap-8 shrink-0">
+      <aside className="hidden md:flex flex-col w-64 border-r border-slate-800 p-6 gap-8 shrink-0 h-full">
         <div className="text-2xl font-bold text-primary tracking-tight">T-memo</div>
         <nav className="flex flex-col gap-2 flex-1">
           <NavItem icon={<Home size={20} />} label="主頁" href="/" active={currentTab === 'home'} />
           <NavItem icon={<Folder size={20} />} label="分類" href="/?tab=categories" active={currentTab === 'categories'} />
-          <NavItem icon={<Star size={20} />} label="精華" href="/?tab=essentials" active={currentTab === 'essentials'} />
+          <NavItem icon={<Star size={20} />} label="靈感牆" href="/?tab=essentials" active={currentTab === 'essentials'} />
           <NavItem icon={<User size={20} />} label="個人檔案" href="/?tab=profile" active={currentTab === 'profile'} />
         </nav>
         <Button variant="ghost" className="justify-start gap-3 text-slate-400" onClick={handleSignOut}>
@@ -36,26 +36,18 @@ function ShellContent({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative">
         <header className="md:hidden flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
           <div className="text-xl font-bold text-primary">T-memo</div>
           <Button variant="ghost" size="icon" onClick={handleSignOut}><LogOut size={20} /></Button>
         </header>
 
-        <section className="flex-1 overflow-y-auto p-4 md:p-8 relative">
+        <section className="flex-1 flex flex-col overflow-hidden relative">
           {children}
-          
-          {/* Floating Add Button */}
-          <Button 
-            className="fixed bottom-20 md:bottom-8 right-6 md:right-8 rounded-full w-14 h-14 shadow-lg shadow-primary/20 z-50"
-            size="icon"
-          >
-            <Plus size={32} />
-          </Button>
         </section>
 
-        {/* Mobile Bottom Nav */}
-        <nav className="md:hidden flex items-center justify-around p-3 border-t border-slate-800 bg-background/80 backdrop-blur-md shrink-0">
+        {/* Mobile Bottom Nav - Fixed at screen bottom */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around p-3 border-t border-slate-800 bg-background/95 backdrop-blur-lg z-[60] pb-safe">
           <NavItem icon={<Home size={24} />} href="/" active={currentTab === 'home'} vertical />
           <NavItem icon={<Folder size={24} />} href="/?tab=categories" active={currentTab === 'categories'} vertical />
           <NavItem icon={<Star size={24} />} href="/?tab=essentials" active={currentTab === 'essentials'} vertical />

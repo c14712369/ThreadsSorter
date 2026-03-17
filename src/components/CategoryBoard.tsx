@@ -3,15 +3,21 @@ import { MemoCard } from './MemoCard'
 import { Folder, ChevronLeft, LayoutGrid } from 'lucide-react'
 import { Button } from './ui/Button'
 
-interface CategoryBoardProps {
-  categories: any[]
-  memos: any[]
-  onUpdateMemo: (memo: any) => void
-  onDeleteMemo: (id: string) => void
-  onToggleEssential: (id: string, is_essential: boolean) => void
-}
-
-export function CategoryBoard({ categories, memos, onUpdateMemo, onDeleteMemo, onToggleEssential }: CategoryBoardProps) {
+export function CategoryBoard({ 
+  categories, 
+  memos, 
+  onDetail, 
+  onDeleteMemo, 
+  onToggleEssential,
+  onManageCategories
+}: { 
+  categories: any[], 
+  memos: any[], 
+  onDetail: (memo: any) => void, 
+  onDeleteMemo: (id: string) => void, 
+  onToggleEssential: (id: string, is_essential: boolean) => void,
+  onManageCategories?: () => void
+}) {
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null)
 
   const getCategoryCount = (id: string) => memos.filter(m => m.category_id === id).length
@@ -59,9 +65,20 @@ export function CategoryBoard({ categories, memos, onUpdateMemo, onDeleteMemo, o
   // 尚未選擇分類，顯示資料夾網格
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="flex items-center gap-3">
-        <LayoutGrid className="text-primary" size={24} />
-        <h2 className="text-xl font-bold">所有分類夾</h2>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <LayoutGrid className="text-primary" size={24} />
+          <h2 className="text-xl font-bold">所有分類夾</h2>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={onManageCategories}
+          className="text-slate-500 hover:text-white gap-2"
+        >
+          <Folder size={16} />
+          管理分類
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">

@@ -8,12 +8,22 @@ interface EssentialBoardProps {
   onToggleEssential: (id: string, is_essential: boolean) => void
 }
 
-export function EssentialBoard({ memos, onUpdateMemo, onDeleteMemo, onToggleEssential }: EssentialBoardProps) {
+export function EssentialBoard({ 
+  memos, 
+  onDetail, 
+  onDeleteMemo, 
+  onToggleEssential 
+}: { 
+  memos: any[], 
+  onDetail: (memo: any) => void, 
+  onDeleteMemo: (id: string) => void, 
+  onToggleEssential: (id: string, is_essential: boolean) => void 
+}) {
   if (memos.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-3">
         <Sparkles size={48} className="text-slate-700" />
-        <p>目前還沒有精華文章</p>
+        <p>靈感牆目前是空的，去首頁加入一些吧！</p>
       </div>
     )
   }
@@ -24,11 +34,10 @@ export function EssentialBoard({ memos, onUpdateMemo, onDeleteMemo, onToggleEsse
         <div key={memo.id} className="break-inside-avoid shadow-2xl hover:-translate-y-1 transition-transform duration-300">
           <MemoCard 
             memo={memo} 
-            categoryName={undefined} // 精華區不特別強調分類名稱，聚焦在內容
-            onEdit={() => {}} // TODO: 若要支援編輯可加上
+            categoryName={undefined}
+            onEdit={onDetail}
             onDelete={onDeleteMemo}
             onToggleEssential={onToggleEssential}
-            // 可以透過一個 prop 通知 MemoCard 以「精華版型」渲染
             isHighlightMode={true}
           />
         </div>

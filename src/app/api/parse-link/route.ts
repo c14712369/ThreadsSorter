@@ -71,9 +71,37 @@ async function handleHtml(html: string, originalUrl: string, handleFallback: str
                     $('meta[name="twitter:description"]').attr('content') || 
                     $('meta[name="description"]').attr('content') || ''
 
-  // 3. Try Image
-  const image = $('meta[property="og:image"]').attr('content') || 
-                $('meta[name="twitter:image"]').attr('content') || ''
+  // 3. Try Image (Filter out obvious video formats)
+  let previewImage = $('meta[property="og:image"]').attr('content') || 
+                     $('meta[name="twitter:image"]').attr('content') || 
+                     $('meta[name="image"]').attr('content') ||
+                     $('link[rel="image_src"]').attr('href') || ''
+
+  // Filter out videos/mp4 if they sneak into image tags
+  if (previewImage.toLowerCase().endsWith('.mp4') || previewImage.toLowerCase().endsWith('.mov')) {
+    previewImage = ''
+  }
+
+  // Fallback if no meta image or it was a video
+  if (!previewImage) {
+    $('img').each((_, el) => {
+      const src = $(el).attr('src')
+      if (src && !src.startsWith('data:') && !src.toLowerCase().endsWith('.mp4') && !src.toLowerCase().endsWith('.mov')) {
+        previewImage = src
+        return false // Break loop
+      }
+    })
+  }
+
+  // Resolve relative URLs
+  if (previewImage && !previewImage.startsWith('http')) {
+    try {
+      const baseUrl = new URL(originalUrl)
+      previewImage = new URL(previewImage, baseUrl.origin).toString()
+    } catch (e) {
+      // ignore
+    }
+  }
 
   // 4. JSON-LD Fallback
   if (!description) {
@@ -121,7 +149,7 @@ async function handleHtml(html: string, originalUrl: string, handleFallback: str
   return NextResponse.json({
     author_handle: authorHandle || '未知作者',
     content_snippet: description || '',
-    preview_image: image,
+    preview_image: previewImage,
     url: originalUrl
   })
 }
