@@ -23,10 +23,37 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
   const [categories, setCategories] = useState<any[]>([])
 
   const [isManualMode, setIsManualMode] = useState(false)
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
+
+  const getImageUrl = (url?: string) => {
+    if (!url) return null
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  }
 
   useEffect(() => {
     if (isOpen) {
       fetchCategories()
+      
+      // 自動讀取剪貼簿並填寫
+      navigator.clipboard.readText()
+        .then(text => {
+          if (text && (text.includes('threads.net') || text.includes('instagram.com'))) {
+            setUrl(text)
+            fetchMetadata(text)
+          }
+        })
+        .catch(err => {
+          console.log('無法讀取剪貼簿 (可能用戶未授權):', err)
+        })
+    } else {
+      // 關閉時清空狀態，避免下次打開時殘留
+      setUrl('')
+      setPreview(null)
+      setError('')
+      setImgError(false)
+      setIsGeneratingAI(false)
+      setPersonalNote('')
+      setIsEssential(false)
     }
   }, [isOpen])
 
@@ -65,8 +92,6 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
       setIsLoading(false)
     }
   }
-
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
 
   const handleManualEntry = () => {
     setPreview({
@@ -218,7 +243,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
                   <div className="shrink-0">
                     {preview.preview_image && !imgError ? (
                       <img 
-                        src={preview.preview_image} 
+                        src={getImageUrl(preview.preview_image)!}
                         referrerPolicy="no-referrer"
                         onError={() => setImgError(true)}
                         className="w-20 h-20 rounded-xl object-cover border border-slate-700 shadow-xl" 

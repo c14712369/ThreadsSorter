@@ -37,11 +37,6 @@ function ShellContent({ children }: { children: ReactNode }) {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative">
-        <header className="md:hidden flex items-center justify-between p-4 border-b border-slate-800 shrink-0">
-          <div className="text-xl font-bold text-primary">T-memo</div>
-          <Button variant="ghost" size="icon" onClick={handleSignOut}><LogOut size={20} /></Button>
-        </header>
-
         <section className="flex-1 flex flex-col overflow-hidden relative">
           {children}
         </section>

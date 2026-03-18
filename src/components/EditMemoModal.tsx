@@ -26,6 +26,11 @@ export function EditMemoModal({
   const [isSaving, setIsSaving] = useState(false)
   const [imgError, setImgError] = useState(false)
 
+  const getImageUrl = (url?: string) => {
+    if (!url) return null
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  }
+
   useEffect(() => {
     if (memo) {
       setCategoryId(memo.category_id || '')
@@ -96,7 +101,7 @@ export function EditMemoModal({
             <div className="w-16 h-16 shrink-0">
               {memo.preview_image && !imgError ? (
                 <img 
-                  src={memo.preview_image} 
+                  src={getImageUrl(memo.preview_image)!}
                   referrerPolicy="no-referrer"
                   onError={() => setImgError(true)}
                   className="w-full h-full rounded-lg object-cover border border-slate-700 shadow-md" 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
@@ -9,7 +9,10 @@ import { AddMemoModal } from '@/components/AddMemoModal'
 import { EditMemoModal } from '@/components/EditMemoModal'
 import { EssentialBoard } from '@/components/EssentialBoard'
 import { CategoryBoard } from '@/components/CategoryBoard'
-import { LayoutGrid, ListFilter, Plus, Loader2, Settings, Sparkles, Star as StarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  LayoutGrid, ListFilter, Plus, Loader2, Star as StarIcon,
+  ChevronLeft, ChevronRight, LogOut, Folder, User
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
@@ -17,67 +20,111 @@ import { Suspense } from 'react'
 import { CategoryManagerModal } from '@/components/CategoryManagerModal'
 import { MemoDetailModal } from '@/components/MemoDetailModal'
 
+// ── 分頁號碼計算 ────────────────────────────────────────────
+function getPageRange(current: number, total: number): (number | 'dot')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const c = current + 1
+  if (c <= 4) return [1, 2, 3, 4, 5, 'dot', total]
+  if (c >= total - 3) return [1, 'dot', total - 4, total - 3, total - 2, total - 1, total]
+  return [1, 'dot', c - 1, c, c + 1, 'dot', total]
+}
+
 function HomeContent() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const tab = searchParams.get('tab')
+  const tab = searchParams.get('tab') || 'home'
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [editingMemo, setEditingMemo] = useState<any>(null)
+  const [memoBeforeEdit, setMemoBeforeEdit] = useState<any>(null) // 從 detail 進 edit 時的暫存
   const [isCatModalOpen, setIsCatModalOpen] = useState(false)
   const [selectedMemoDetail, setSelectedMemoDetail] = useState<any>(null)
-  
+
+  // ── 主頁資料 ──
   const [memos, setMemos] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategoryId, setSelectedCategoryId] = useState('all')
   const [onlyEssential, setOnlyEssential] = useState(false)
+  const [onlyArchived, setOnlyArchived] = useState(false)
   const [page, setPage] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
   const PAGE_SIZE = 10
 
-  // Sync state with URL params
+  // ── 分頁 Tab 用的全量資料 ──
+  const [allMemos, setAllMemos] = useState<any[]>([])
+  const [isViewLoading, setIsViewLoading] = useState(false)
+
+  // ── Scroll container ref ──
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+  // ── FAB scroll-hide ──
+  const lastScrollY = useRef(0)
+  const [fabVisible, setFabVisible] = useState(true)
+
+  // ── 搜尋 Debounce ──
   useEffect(() => {
-    if (tab === 'essentials') {
-      setOnlyEssential(true)
-    } else if (tab === 'categories') {
-      setOnlyEssential(false)
-    } else {
-      setOnlyEssential(false)
-    }
+    const t = setTimeout(() => {
+      setMemos([])
+      setSearchQuery(searchInput)
+      setPage(0)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  // 篩選改變時重置頁碼並清空舊卡片，避免切換時舊資料透過遮罩露出
+  useEffect(() => {
     setPage(0)
-  }, [tab])
+    setMemos([])
+  }, [selectedCategoryId, onlyEssential, onlyArchived])
 
-  // Reset to page 0 when filtering
+  // 切頁 / 切篩選時回到最上方
   useEffect(() => {
-    setPage(0)
-  }, [selectedCategoryId, onlyEssential, searchQuery])
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+  }, [page, onlyEssential, onlyArchived, selectedCategoryId])
 
+  // Auth guard + 初始資料
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-    } else if (user) {
-      fetchMemos()
-      fetchCategories()
-      fetchTotalCount()
-    }
-  }, [user, authLoading, page, selectedCategoryId, onlyEssential, searchQuery])
+    if (!authLoading && !user) router.push('/login')
+    else if (user) fetchCategories()
+  }, [user, authLoading])
 
-  const fetchTotalCount = async () => {
+  // 主頁 memo 查詢
+  useEffect(() => {
+    if (user && tab === 'home') fetchMemos()
+  }, [user, tab, page, selectedCategoryId, onlyEssential, onlyArchived, searchQuery])
+
+  // 分頁 tab 全量查詢
+  useEffect(() => {
     if (!user) return
-    let query = supabase
-      .from('memos')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id)
-    
-    if (selectedCategoryId !== 'all') query = query.eq('category_id', selectedCategoryId)
-    if (onlyEssential) query = query.eq('is_essential', true)
-    if (searchQuery) query = query.ilike('content_snippet', `%${searchQuery}%`)
-    
-    const { count } = await query
-    setTotalCount(count || 0)
+    if (tab === 'categories') fetchAllMemos(false)
+    else if (tab === 'essentials') fetchAllMemos(true)
+  }, [user, tab])
+
+  // 並行預載所有圖片，存進瀏覽器快取後再顯示卡片
+  const preloadImages = (data: any[]): Promise<void> => {
+    const urls = data
+      .map(m => m.preview_image)
+      .filter(url => url && !url.startsWith('data:'))
+      .map(url => `/api/image-proxy?url=${encodeURIComponent(url)}`)
+
+    if (urls.length === 0) return Promise.resolve()
+
+    const imageLoads = Promise.all(
+      urls.map(src => new Promise<void>(resolve => {
+        const img = new Image()
+        img.onload = () => resolve()
+        img.onerror = () => resolve() // 失敗也繼續，不阻塞
+        img.src = src
+      }))
+    ).then(() => {})
+
+    // 最多等 4 秒，避免網路差時卡住
+    const timeout = new Promise<void>(resolve => setTimeout(resolve, 4000))
+    return Promise.race([imageLoads, timeout])
   }
 
   const fetchMemos = async () => {
@@ -85,250 +132,406 @@ function HomeContent() {
     setIsLoading(true)
     let query = supabase
       .from('memos')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-      
+
     if (selectedCategoryId !== 'all') query = query.eq('category_id', selectedCategoryId)
-    if (onlyEssential) query = query.eq('is_essential', true)
+    if (onlyArchived) {
+      query = query.eq('is_archived', true)
+    } else {
+      query = query.eq('is_archived', false)
+      if (onlyEssential) query = query.eq('is_essential', true)
+    }
     if (searchQuery) query = query.ilike('content_snippet', `%${searchQuery}%`)
-    
-    const { data } = await query
-    if (data) setMemos(data)
+
+    const { data, count } = await query
+    setTotalCount(count || 0)
+
+    if (data) {
+      // 先預載圖片，全部就緒後才一次顯示所有卡片
+      await preloadImages(data)
+      setMemos(data)
+    }
+
     setIsLoading(false)
+  }
+
+  const fetchAllMemos = async (essentialOnly: boolean) => {
+    if (!user) return
+    setIsViewLoading(true)
+    let query = supabase
+      .from('memos')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_archived', false)
+      .order('created_at', { ascending: false })
+    if (essentialOnly) query = query.eq('is_essential', true)
+    const { data } = await query
+    if (data) setAllMemos(data)
+    setIsViewLoading(false)
   }
 
   const fetchCategories = async () => {
     if (!user) return
-    const { data } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('name')
+    const { data } = await supabase.from('categories').select('*').eq('user_id', user.id).order('name')
     if (data) setCategories(data)
   }
-
 
   const handleDeleteMemo = async (id: string) => {
     const { error } = await supabase.from('memos').delete().eq('id', id)
     if (!error) {
-      setMemos(memos.filter(m => m.id !== id))
-      fetchTotalCount()
+      setMemos(prev => prev.filter(m => m.id !== id))
+      setAllMemos(prev => prev.filter(m => m.id !== id))
+      setTotalCount(prev => prev - 1)
       if (selectedMemoDetail?.id === id) setSelectedMemoDetail(null)
     }
   }
 
   const handleUpdateMemo = (updatedMemo: any) => {
-    setMemos(memos.map(m => m.id === updatedMemo.id ? updatedMemo : m))
+    setMemos(prev => prev.map(m => m.id === updatedMemo.id ? updatedMemo : m))
+    setAllMemos(prev => prev.map(m => m.id === updatedMemo.id ? updatedMemo : m))
     if (selectedMemoDetail?.id === updatedMemo.id) setSelectedMemoDetail(updatedMemo)
   }
 
   const handleToggleEssential = async (id: string, is_essential: boolean) => {
-    setMemos(memos.map(m => m.id === id ? { ...m, is_essential } : m))
-    if (selectedMemoDetail?.id === id) setSelectedMemoDetail({ ...selectedMemoDetail, is_essential })
-    
+    if (onlyEssential && !is_essential) {
+      setMemos(prev => prev.filter(m => m.id !== id))
+      setTotalCount(prev => prev - 1)
+    } else {
+      setMemos(prev => prev.map(m => m.id === id ? { ...m, is_essential } : m))
+    }
+    if (tab === 'essentials' && !is_essential) {
+      setAllMemos(prev => prev.filter(m => m.id !== id))
+    } else {
+      setAllMemos(prev => prev.map(m => m.id === id ? { ...m, is_essential } : m))
+    }
+    if (selectedMemoDetail?.id === id) setSelectedMemoDetail((prev: any) => prev ? { ...prev, is_essential } : null)
     await supabase.from('memos').update({ is_essential }).eq('id', id)
   }
 
-  const getCategoryCount = (categoryId: string) => {
-    // This is a simplified client-side count for the tabs
-    if (categoryId === 'all') return totalCount
-    // For specific categories, we'd ideally fetch counts from API, but for now use current state if available
-    return categories.find(c => c.id === categoryId)?.count || 0
+  const handleToggleArchive = async (id: string, is_archived: boolean) => {
+    setMemos(prev => prev.filter(m => m.id !== id))
+    setAllMemos(prev => prev.filter(m => m.id !== id))
+    setTotalCount(prev => prev - 1)
+    await supabase.from('memos').update({ is_archived }).eq('id', id)
   }
 
-  return (
-    <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden relative">
-      {/* 1. 固定標頭區域 (Fixed Header) - 絕對不捲動 */}
-      <div className="shrink-0 pt-6 pb-4 px-4 sm:px-0 bg-background border-b border-white/5 space-y-4 z-30">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-white tracking-tight">
-              {tab === 'essentials' ? '靈感牆' : tab === 'categories' ? '分類看板' : '我的珍藏'}
-            </h1>
-            <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-black border border-primary/20 uppercase">
-              {totalCount} Total
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <Button 
-              variant={onlyEssential ? 'primary' : 'ghost'} 
-              size="icon" 
-              onClick={() => setOnlyEssential(!onlyEssential)}
-              className={cn("rounded-xl transition-all", onlyEssential ? "shadow-lg shadow-primary/20" : "text-slate-400")}
-            >
-              <StarIcon size={20} fill={onlyEssential ? 'currentColor' : 'none'} />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-slate-400 hover:text-white rounded-xl" onClick={() => setIsCatModalOpen(true)}>
-              <Settings size={20} />
-            </Button>
-          </div>
-        </div>
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
-        <div className="relative group">
-          <input 
-            type="text"
-            placeholder="搜尋你的靈感..."
-            className="w-full bg-slate-900/40 border border-slate-800 rounded-2xl px-5 py-3.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40 transition-all font-medium placeholder:text-slate-600 shadow-inner"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-          <button 
-            onClick={() => setSelectedCategoryId('all')}
-            className={cn(
-              "whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2",
-              selectedCategoryId === 'all' 
-                ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" 
-                : "bg-slate-900/40 text-slate-500 border-slate-800 hover:border-slate-700 hover:text-slate-300"
-            )}
-          >
-            全部
-          </button>
-          {categories.map((cat) => (
-            <button 
-              key={cat.id}
-              onClick={() => setSelectedCategoryId(cat.id)}
-              className={cn(
-                "whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-2",
-                selectedCategoryId === cat.id 
-                  ? "bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20" 
-                  : "bg-slate-900/40 text-slate-500 border-slate-800 hover:border-slate-700 hover:text-slate-300"
-              )}
-            >
-              {cat.name}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 2. 獨立捲軸文章列表區域 (Scrollable List Container) */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 sm:px-0 pt-4 pb-32 no-scrollbar">
-        {tab === 'essentials' ? (
-          <EssentialBoard 
-            memos={memos} 
-            onDetail={setSelectedMemoDetail}
-            onDeleteMemo={handleDeleteMemo}
-            onToggleEssential={handleToggleEssential}
-          />
-        ) : tab === 'categories' ? (
-          <CategoryBoard 
-            categories={categories}
-            memos={memos} 
-            onDetail={setSelectedMemoDetail}
-            onDeleteMemo={handleDeleteMemo}
-            onToggleEssential={handleToggleEssential}
-            onManageCategories={() => setIsCatModalOpen(true)}
-          />
-        ) : (
-          <div className="space-y-4">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-500 gap-4">
-                <Loader2 className="animate-spin text-primary" size={40} strokeWidth={3} />
-                <p className="text-sm font-black uppercase tracking-widest opacity-50">載入中</p>
-              </div>
-            ) : memos.length === 0 ? (
-              <div className="text-center py-20 border-2 border-dashed border-slate-800/50 rounded-[2rem] text-slate-500 space-y-4 bg-slate-900/20">
-                <div className="flex justify-center opacity-20"><LayoutGrid size={64} /></div>
-                <div>
-                  <p className="font-bold text-slate-400">{searchQuery ? '找不到相關靈感' : '這裡還是空的'}</p>
-                  <p className="text-xs text-slate-600 mt-1">開始收藏值得紀錄的 Threads 吧！</p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => setIsAddModalOpen(true)} className="rounded-xl border border-slate-800">立即新增</Button>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {memos.map((memo) => (
-                  <MemoCard 
-                    key={memo.id} 
-                    memo={memo} 
-                    categoryName={categories.find(c => c.id === memo.category_id)?.name}
-                    onEdit={setSelectedMemoDetail}
-                    onDelete={handleDeleteMemo}
-                    onToggleEssential={handleToggleEssential}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Pagination */}
-            {!isLoading && totalCount > PAGE_SIZE && (
-              <div className="flex items-center justify-between pt-6 border-t border-slate-800/40">
-                <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">
-                  Page {page + 1} / {Math.ceil(totalCount / PAGE_SIZE)}
-                </span>
-                <div className="flex gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    disabled={page === 0}
-                    onClick={() => setPage(p => p - 1)}
-                    className="rounded-xl border border-slate-800 w-10 h-10"
-                  >
-                    <ChevronLeft size={18} />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    disabled={(page + 1) * PAGE_SIZE >= totalCount}
-                    onClick={() => setPage(p => p + 1)}
-                    className="rounded-xl border border-slate-800 w-10 h-10"
-                  >
-                    <ChevronRight size={18} />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 3. 模態框與懸浮按鈕 (Modals & FAB) */}
-      <AddMemoModal 
-        isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
-        onSuccess={fetchMemos}
-      />
-      
-      <MemoDetailModal 
+  // ── 共用 Modals (所有 tab 共享) ──
+  const sharedModals = (
+    <>
+      <AddMemoModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSuccess={fetchMemos} />
+      <MemoDetailModal
         memo={selectedMemoDetail}
         isOpen={!!selectedMemoDetail}
         onClose={() => setSelectedMemoDetail(null)}
         categoryName={categories.find(c => c.id === selectedMemoDetail?.category_id)?.name}
         onDelete={handleDeleteMemo}
         onToggleEssential={handleToggleEssential}
-        onEdit={(m) => {
-          setSelectedMemoDetail(null)
-          setEditingMemo(m)
-        }}
+        onToggleArchive={handleToggleArchive}
+        onEdit={(m) => { setMemoBeforeEdit(selectedMemoDetail); setSelectedMemoDetail(null); setEditingMemo(m) }}
       />
-
       <EditMemoModal
         isOpen={!!editingMemo}
         memo={editingMemo}
-        onClose={() => setEditingMemo(null)}
-        onUpdate={handleUpdateMemo}
+        onClose={() => {
+          setEditingMemo(null)
+          // 取消編輯時，若是從 detail 進來的就回到 detail
+          if (memoBeforeEdit) {
+            setSelectedMemoDetail(memoBeforeEdit)
+            setMemoBeforeEdit(null)
+          }
+        }}
+        onUpdate={(updatedMemo) => {
+          handleUpdateMemo(updatedMemo)
+          setMemoBeforeEdit(null) // 儲存成功，清掉，不回 detail
+        }}
         onDelete={handleDeleteMemo}
       />
-
-      <CategoryManagerModal 
+      <CategoryManagerModal
         isOpen={isCatModalOpen}
         onClose={() => setIsCatModalOpen(false)}
         userId={user?.id || ''}
         categories={categories}
         onCategoriesChange={fetchCategories}
       />
+    </>
+  )
 
-      <Button 
+  // ══════════════════════════════════════════════
+  // Tab: 分類
+  // ══════════════════════════════════════════════
+  if (tab === 'categories') {
+    return (
+      <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden bg-[#0B1120]">
+        <div className="shrink-0 pt-7 pb-4 px-5">
+          <h1 className="text-2xl font-black text-white tracking-tighter">分類</h1>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-24 no-scrollbar">
+          {isViewLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="animate-spin text-primary" size={32} />
+            </div>
+          ) : (
+            <div className="animate-in fade-in duration-300">
+              <CategoryBoard
+                categories={categories}
+                memos={allMemos}
+                onDetail={setSelectedMemoDetail}
+                onDeleteMemo={handleDeleteMemo}
+                onToggleEssential={handleToggleEssential}
+                onManageCategories={() => setIsCatModalOpen(true)}
+              />
+            </div>
+          )}
+        </div>
+        {sharedModals}
+      </div>
+    )
+  }
+
+  // ══════════════════════════════════════════════
+  // Tab: 靈感牆
+  // ══════════════════════════════════════════════
+  if (tab === 'essentials') {
+    return (
+      <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden bg-[#0B1120]">
+        <div className="shrink-0 pt-7 pb-4 px-5">
+          <h1 className="text-2xl font-black text-white tracking-tighter">靈感牆</h1>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-24 no-scrollbar">
+          {isViewLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="animate-spin text-primary" size={32} />
+            </div>
+          ) : (
+            <div className="animate-in fade-in duration-300">
+              <EssentialBoard
+                memos={allMemos}
+                onDetail={setSelectedMemoDetail}
+                onDeleteMemo={handleDeleteMemo}
+                onToggleEssential={handleToggleEssential}
+              />
+            </div>
+          )}
+        </div>
+        {sharedModals}
+      </div>
+    )
+  }
+
+  // ══════════════════════════════════════════════
+  // Tab: 個人
+  // ══════════════════════════════════════════════
+  if (tab === 'profile') {
+    return (
+      <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden bg-[#0B1120]">
+        <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
+          <div className="w-20 h-20 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <User size={36} className="text-primary/60" />
+          </div>
+          <div className="text-center space-y-1">
+            <p className="text-white font-bold">{user?.email}</p>
+            <p className="text-slate-500 text-xs">{totalCount} 篇收藏 · {categories.length} 個分類</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm font-bold hover:bg-rose-500/20 transition-colors"
+          >
+            <LogOut size={16} />
+            登出
+          </button>
+        </div>
+        {sharedModals}
+      </div>
+    )
+  }
+
+  // ══════════════════════════════════════════════
+  // Tab: 主頁 (home)
+  // ══════════════════════════════════════════════
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
+  const hasPagination = totalCount > PAGE_SIZE
+
+  return (
+    <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden relative bg-[#0B1120]">
+
+      {/* ── 標頭 ── */}
+      <div className="shrink-0 pt-7 pb-3 px-5 space-y-3.5 z-30">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-black text-white tracking-tighter">Thorter</h1>
+          <div className="flex items-center gap-1">
+            <button className="p-2 text-slate-400 hover:text-white transition-colors" onClick={() => setIsCatModalOpen(true)} title="管理分類">
+              <Folder size={20} />
+            </button>
+            <button className="p-2 text-slate-400 hover:text-rose-400 transition-colors" onClick={handleLogout} title="登出">
+              <LogOut size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* 搜尋欄 */}
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="搜尋收藏..."
+            className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all placeholder:text-slate-600"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+
+        {/* 篩選列 */}
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
+            {[
+              { id: 'all', label: '全部', action: () => { setOnlyEssential(false); setOnlyArchived(false) }, active: !onlyEssential && !onlyArchived },
+              { id: 'essentials', label: '釘選', icon: <StarIcon size={11} fill="currentColor" />, action: () => { setOnlyEssential(true); setOnlyArchived(false) }, active: onlyEssential && !onlyArchived },
+              { id: 'archived', label: '封存', icon: <Folder size={11} />, action: () => { setOnlyEssential(false); setOnlyArchived(true) }, active: onlyArchived },
+            ].map((tabItem) => (
+              <button
+                key={tabItem.id}
+                onClick={tabItem.action}
+                className={cn(
+                  "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0",
+                  tabItem.active
+                    ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20"
+                    : "bg-white/5 text-slate-500 border-white/5 hover:border-white/10 hover:text-slate-300"
+                )}
+              >
+                {tabItem.icon}
+                {tabItem.label}
+              </button>
+            ))}
+          </div>
+
+          {/* 分類選單 */}
+          <div className="relative shrink-0">
+            <select
+              className="bg-white/5 border border-white/5 rounded-xl pl-3 pr-8 py-1.5 text-xs font-bold text-slate-400 appearance-none focus:outline-none focus:border-primary/30 transition-colors max-w-[7rem]"
+              value={selectedCategoryId}
+              onChange={(e) => setSelectedCategoryId(e.target.value)}
+            >
+              <option value="all">所有分類</option>
+              {categories.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+            <ListFilter size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-600 pointer-events-none" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── 列表 ── */}
+      <div className="flex-1 min-h-0 relative overflow-hidden">
+        {/* 切頁遮罩：有資料且正在 loading 時顯示 */}
+        {isLoading && memos.length > 0 && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0B1120]/75 backdrop-blur-[2px] pointer-events-none">
+            <Loader2 className="animate-spin text-primary" size={28} strokeWidth={2.5} />
+          </div>
+        )}
+
+        <div
+          ref={scrollContainerRef}
+          className="h-full overflow-y-auto overscroll-contain px-5 pt-1 pb-3 no-scrollbar"
+          onScroll={(e) => {
+            const curr = e.currentTarget.scrollTop
+            if (curr > lastScrollY.current + 8) setFabVisible(false)
+            else if (curr < lastScrollY.current - 8) setFabVisible(true)
+            lastScrollY.current = curr
+          }}
+        >
+          {isLoading && memos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <Loader2 className="animate-spin text-primary" size={36} strokeWidth={3} />
+              <p className="text-xs font-black uppercase tracking-widest text-slate-600">載入中</p>
+            </div>
+          ) : memos.length === 0 ? (
+            <div className="text-center py-16 border-2 border-dashed border-white/5 rounded-[2rem] text-slate-500 space-y-3 bg-white/[0.02]">
+              <div className="flex justify-center opacity-10"><LayoutGrid size={56} /></div>
+              <p className="font-bold text-slate-500 text-sm">尚無內容</p>
+              <Button variant="ghost" size="sm" onClick={() => setIsAddModalOpen(true)} className="rounded-xl border border-white/10 text-xs">立即新增</Button>
+            </div>
+          ) : (
+            <div
+              key={`${onlyEssential}-${onlyArchived}-${selectedCategoryId}-${page}`}
+              className="grid gap-3 animate-in fade-in duration-200"
+            >
+              {memos.map((memo) => (
+                <MemoCard
+                  key={memo.id}
+                  memo={memo}
+                  categoryName={categories.find(c => c.id === memo.category_id)?.name}
+                  onEdit={setSelectedMemoDetail}
+                  onDelete={handleDeleteMemo}
+                  onToggleEssential={handleToggleEssential}
+                  onToggleArchive={handleToggleArchive}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 分頁 ── */}
+      {hasPagination && (
+        <div className="shrink-0 flex items-center justify-center gap-1 px-5 py-2 pb-[5.5rem] md:pb-3 border-t border-white/[0.04]">
+          <button
+            disabled={page === 0}
+            onClick={() => { setMemos([]); setPage(p => p - 1) }}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          {getPageRange(page, totalPages).map((p, i) =>
+            p === 'dot' ? (
+              <span key={`dot-${i}`} className="w-8 h-8 flex items-center justify-center text-slate-700 text-xs select-none">…</span>
+            ) : (
+              <button
+                key={p}
+                onClick={() => { setMemos([]); setPage((p as number) - 1) }}
+                className={cn(
+                  "w-8 h-8 rounded-lg text-xs font-bold transition-all",
+                  (p as number) - 1 === page
+                    ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
+                    : "text-slate-500 hover:text-white hover:bg-white/5"
+                )}
+              >
+                {p}
+              </button>
+            )
+          )}
+
+          <button
+            disabled={(page + 1) * PAGE_SIZE >= totalCount}
+            onClick={() => { setMemos([]); setPage(p => p + 1) }}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* ── FAB ── */}
+      <button
         onClick={() => setIsAddModalOpen(true)}
-        className="fixed bottom-24 md:bottom-10 right-6 md:right-10 rounded-full w-14 h-14 shadow-xl shadow-primary/20 z-[100] flex items-center justify-center p-0 hover:scale-110 active:scale-95 transition-all group"
-        variant="primary"
+        className={cn(
+          "fixed bottom-[4.5rem] right-5 md:bottom-8 w-[3.25rem] h-[3.25rem] bg-primary text-primary-foreground rounded-full shadow-xl shadow-primary/25 z-[90] flex items-center justify-center group",
+          "transition-all duration-300",
+          fabVisible ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-90 pointer-events-none"
+        )}
       >
-        <Plus size={32} className="group-hover:rotate-90 transition-transform duration-300" />
-      </Button>
+        <Plus size={26} strokeWidth={3} className="group-hover:rotate-90 transition-transform duration-300" />
+      </button>
+
+      {sharedModals}
     </div>
   )
 }
@@ -340,4 +543,3 @@ export default function Home() {
     </Suspense>
   )
 }
-

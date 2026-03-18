@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.memos (
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
   url TEXT NOT NULL,
   author_handle TEXT,
+  author_bio TEXT,
   content_snippet TEXT,
   post_timestamp TIMESTAMP WITH TIME ZONE,
   category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,

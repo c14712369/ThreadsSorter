@@ -1,9 +1,11 @@
 'use client'
 
-import { X, ExternalLink, Calendar, User, Tag, MessageCircle, Copy, Check, Trash2 } from 'lucide-react'
+import { X, ExternalLink, Calendar, User, Tag, MessageCircle, Trash2, Star, Archive, Pencil } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card } from './ui/Card'
 import { useState } from 'react'
+import { cn } from '@/lib/utils'
+import Image from 'next/image'
 
 export function MemoDetailModal({ 
   memo, 
@@ -12,6 +14,7 @@ export function MemoDetailModal({
   categoryName,
   onDelete,
   onToggleEssential,
+  onToggleArchive,
   onEdit
 }: { 
   memo: any, 
@@ -20,111 +23,172 @@ export function MemoDetailModal({
   categoryName?: string,
   onDelete: (id: string) => void,
   onToggleEssential: (id: string, is_essential: boolean) => void,
+  onToggleArchive: (id: string, is_archived: boolean) => void,
   onEdit: (memo: any) => void
 }) {
-  const [copied, setCopied] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isImgLoaded, setIsImgLoaded] = useState(false)
 
   if (!isOpen || !memo) return null
 
-  const handleCopy = () => {
-    const text = `【AI 摘要】\n${memo.ai_summary || memo.personal_note}\n\n【原文連結】\n${memo.url}`
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const getImageUrl = (url?: string) => {
+    if (!url) return null
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`
   }
+
+  const imageUrl = getImageUrl(memo.preview_image)
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <Card className="w-full max-w-2xl bg-slate-900 border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300">
-        {/* Header Image or Placeholder */}
-        <div className="w-full h-48 sm:h-64 relative bg-slate-800 overflow-hidden shrink-0">
-          {memo.preview_image ? (
-            <img 
-              src={memo.preview_image} 
-              alt="Preview" 
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
+      <Card className="w-full max-w-2xl bg-slate-900 border-slate-800 shadow-2xl overflow-hidden flex flex-col h-[50vh] animate-in zoom-in-95 duration-300">
+        {/* Header Image Area */}
+        <div className="w-full h-[30vh] relative bg-slate-950 overflow-hidden shrink-0 flex items-center justify-center border-b border-slate-800">
+          {!isImgLoaded && memo.preview_image && (
+            <div className="absolute inset-0 bg-slate-800 animate-pulse flex items-center justify-center">
+              <MessageCircle size={32} className="text-slate-700 opacity-50" />
+            </div>
+          )}
+          
+          {imageUrl ? (
+            <>
+              <div 
+                className={cn(
+                  "absolute inset-0 opacity-40 blur-xl scale-110 pointer-events-none transition-opacity duration-700",
+                  isImgLoaded ? "opacity-40" : "opacity-0"
+                )}
+                style={{ 
+                  backgroundImage: `url(${imageUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center'
+                }}
+              />
+              <img 
+                src={imageUrl}
+                alt="Preview" 
+                onLoad={() => setIsImgLoaded(true)}
+                className={cn(
+                  "relative z-10 w-full h-full object-contain transition-all duration-700",
+                  isImgLoaded ? "opacity-100 scale-100" : "opacity-0 scale-95"
+                )}
+              />
+            </>
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
-              <MessageCircle size={64} className="text-slate-700 opacity-50" />
+              <MessageCircle size={48} className="text-slate-700 opacity-50" />
             </div>
           )}
           <button 
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-md transition-colors"
+            className="absolute top-3 right-3 p-2 bg-black/60 hover:bg-black/80 text-white rounded-full backdrop-blur-xl transition-colors z-20 shadow-lg border border-white/10"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
           {/* Metadata Bar */}
-          <div className="flex flex-wrap items-center gap-4 text-xs font-bold uppercase tracking-widest text-slate-500">
-            <div className="flex items-center gap-1.5 text-primary">
-              <User size={14} />
-              {memo.author_handle}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Calendar size={14} />
-              {new Date(memo.created_at).toLocaleDateString()}
-            </div>
-            {categoryName && (
-              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                <Tag size={12} />
-                {categoryName}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <div className="flex items-center gap-1.5 text-primary">
+                <User size={12} />
+                {memo.author_handle}
               </div>
+              <div className="flex items-center gap-1.5">
+                <Calendar size={12} />
+                {new Date(memo.created_at).toLocaleDateString()}
+              </div>
+              {categoryName && (
+                <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
+                  <Tag size={10} />
+                  {categoryName}
+                </div>
+              )}
+            </div>
+            
+            {memo.author_bio && (
+              <p className="text-[11px] text-slate-400 leading-relaxed bg-white/5 p-2.5 rounded-lg border border-white/5 italic">
+                {memo.author_bio}
+              </p>
             )}
           </div>
 
           {/* AI Summary Section */}
           {(memo.ai_summary || memo.personal_note) && (
-            <div className="p-5 bg-primary/5 border border-primary/10 rounded-2xl relative group">
-              <div className="absolute -top-3 left-4 px-2 py-1 bg-primary text-primary-foreground text-[10px] font-black rounded uppercase tracking-tighter">AI Summary</div>
-              <p className="text-lg text-slate-200 leading-relaxed font-medium">
+            <div className="p-4 bg-primary/5 border border-primary/10 rounded-xl relative group">
+              <div className="absolute -top-2.5 left-3 px-1.5 py-0.5 bg-primary text-primary-foreground text-[8px] font-black rounded uppercase tracking-tighter">Summary</div>
+              <p className="text-base text-slate-200 leading-snug font-medium">
                 {memo.ai_summary || memo.personal_note}
               </p>
             </div>
           )}
 
-          {/* Original Snippet Section */}
-          <div className="space-y-3">
-            <h4 className="text-[10px] font-black uppercase text-slate-600 tracking-[0.2em] flex items-center gap-2">
-              <div className="w-4 h-px bg-slate-800" />
-              原始內容片段
-            </h4>
-            <div className="p-4 bg-slate-950/50 rounded-xl border border-slate-800">
-              <p className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">
+          {/* Snippet & Tags */}
+          <div className="space-y-3 pt-1">
+            {memo.content_snippet && (
+              <p className="text-slate-400 text-xs leading-relaxed italic opacity-80 line-clamp-2">
                 {memo.content_snippet}
               </p>
-            </div>
+            )}
+            
+            {memo.ai_tags && memo.ai_tags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {memo.ai_tags.map((tag: string) => (
+                  <span key={tag} className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[9px] font-bold border border-slate-700">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-
-          {/* Tags */}
-          {memo.ai_tags && memo.ai_tags.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {memo.ai_tags.map((tag: string) => (
-                <span key={tag} className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 text-[10px] font-bold border border-slate-700">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Footer Actions */}
         <div className="p-4 border-t border-slate-800 bg-slate-900 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
+            {/* 珍藏按鈕 */}
             <Button 
               variant="ghost" 
-              className="gap-2 text-slate-400 hover:text-white px-3"
-              onClick={handleCopy}
+              size="icon"
+              className={cn(
+                "transition-colors",
+                memo.is_essential ? "text-amber-500 hover:text-amber-600" : "text-slate-500 hover:text-amber-400"
+              )}
+              onClick={() => onToggleEssential(memo.id, !memo.is_essential)}
             >
-              {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
-              <span className="text-xs">{copied ? '已複製' : '摘要'}</span>
+              <Star size={18} fill={memo.is_essential ? "currentColor" : "none"} />
             </Button>
-            
+
+            {/* 封存按鈕 */}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className={cn(
+                "transition-colors",
+                memo.is_archived ? "text-emerald-500 hover:text-emerald-600" : "text-slate-500 hover:text-emerald-400"
+              )}
+              onClick={() => {
+                onToggleArchive(memo.id, !memo.is_archived)
+                onClose()
+              }}
+              title={memo.is_archived ? "取消封存" : "封存"}
+            >
+              <Archive size={18} />
+            </Button>
+
+            {/* 編輯按鈕 - 找回來了！ */}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="text-slate-500 hover:text-primary transition-colors"
+              onClick={() => {
+                onEdit(memo)
+              }}
+              title="編輯分類與內容"
+            >
+              <Pencil size={18} />
+            </Button>
+
+            {/* 刪除按鈕 */}
             <Button 
               variant="ghost" 
               size="icon"
@@ -140,15 +204,6 @@ export function MemoDetailModal({
               }}
             >
               <Trash2 size={18} />
-            </Button>
-
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="text-slate-500 hover:text-primary"
-              onClick={() => onEdit(memo)}
-            >
-              <Tag size={18} />
             </Button>
           </div>
 
