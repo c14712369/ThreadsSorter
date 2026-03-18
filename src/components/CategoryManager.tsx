@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Plus, Tag, Loader2, Edit2, Check, Trash2 } from 'lucide-react'
 import { Button } from './ui/Button'
 import { supabase } from '@/lib/supabase'
