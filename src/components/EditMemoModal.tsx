@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Loader2, Star, Trash2, ExternalLink, MessageCircle, Folder, Sparkles, X, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Loader2, Star, Trash2, ExternalLink, MessageCircle, Folder, Sparkles, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 export function EditMemoModal({
@@ -29,8 +29,6 @@ export function EditMemoModal({
   const [aiSummary, setAiSummary] = useState('')
   const [aiTags, setAiTags] = useState<string[]>([])
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
-  const [aiSuggestion, setAiSuggestion] = useState<{ summary: string; tags: string[]; categoryId?: string } | null>(null)
-  const [aiDismissed, setAiDismissed] = useState(false)
 
   const getImageUrl = (url?: string) => {
     if (!url) return null
@@ -46,8 +44,6 @@ export function EditMemoModal({
       setImgError(false)
       setAiSummary(memo.ai_summary || '')
       setAiTags(memo.ai_tags || [])
-      setAiSuggestion(null)
-      setAiDismissed(false)
       fetchCategories().then((cats) => {
         // 沒有 ai_summary 時自動觸發 AI
         if (!memo.ai_summary && memo.content_snippet) {
@@ -66,8 +62,6 @@ export function EditMemoModal({
   const generateAI = async (targetMemo: any, cats?: any[]) => {
     if (!targetMemo?.content_snippet) return
     setIsGeneratingAI(true)
-    setAiSuggestion(null)
-    setAiDismissed(false)
     try {
       const res = await fetch('/api/generate-summary', {
         method: 'POST',
@@ -87,24 +81,15 @@ export function EditMemoModal({
           t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase())
         )
       )
-      setAiSuggestion({
-        summary: data.summary,
-        tags: data.tags || [],
-        categoryId: matchedCat?.id
-      })
+      // 直接套用，不詢問
+      setAiSummary(data.summary)
+      setAiTags(data.tags || [])
+      if (matchedCat?.id) setCategoryId(matchedCat.id)
     } catch {
       // Silent fail
     } finally {
       setIsGeneratingAI(false)
     }
-  }
-
-  const handleApplyAI = () => {
-    if (!aiSuggestion) return
-    setAiSummary(aiSuggestion.summary)
-    setAiTags(aiSuggestion.tags)
-    if (aiSuggestion.categoryId) setCategoryId(aiSuggestion.categoryId)
-    setAiDismissed(true)
   }
 
   const handleSave = async () => {
@@ -227,8 +212,7 @@ export function EditMemoModal({
                 <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
                 <span className="text-sm font-black tracking-wider text-primary">AI 建議</span>
               </div>
-              {/* 已有摘要時顯示「重新生成」按鈕 */}
-              {!isGeneratingAI && !aiSuggestion && (
+              {!isGeneratingAI && (
                 <button
                   onClick={() => generateAI(memo)}
                   className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-primary transition-colors"
@@ -241,29 +225,9 @@ export function EditMemoModal({
             {isGeneratingAI ? (
               <div className="rounded-2xl bg-slate-800/40 border border-white/[0.06] p-4 flex items-center gap-3">
                 <Loader2 size={16} className="animate-spin text-primary shrink-0" />
-                <span className="text-sm text-slate-500">正在生成 AI 摘要…</span>
-              </div>
-            ) : aiSuggestion && !aiDismissed ? (
-              /* 新建議卡片 */
-              <div className="rounded-2xl bg-slate-800/40 border border-primary/10 p-5 space-y-4">
-                <p className="text-slate-100 text-base font-medium leading-relaxed">{aiSuggestion.summary}</p>
-                <div className="flex items-center justify-end gap-4 border-t border-white/[0.06] pt-3">
-                  <button
-                    onClick={() => setAiDismissed(true)}
-                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    <X size={11} /> 忽略
-                  </button>
-                  <button
-                    onClick={handleApplyAI}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-[#0B1120] rounded-full text-xs font-black active:scale-95 transition-transform"
-                  >
-                    <Sparkles size={11} /> 套用
-                  </button>
-                </div>
+                <span className="text-sm text-slate-500">正在生成…</span>
               </div>
             ) : aiSummary ? (
-              /* 已套用／已有摘要：顯示目前的摘要 */
               <div className="rounded-2xl bg-slate-800/40 border border-primary/10 px-4 py-3 space-y-2.5">
                 <p className="text-slate-200 text-sm italic leading-relaxed">{aiSummary}</p>
                 {aiTags.length > 0 && (
@@ -277,7 +241,6 @@ export function EditMemoModal({
                 )}
               </div>
             ) : (
-              /* 無摘要且無建議（生成失敗）：顯示手動觸發按鈕 */
               <button
                 onClick={() => generateAI(memo)}
                 className="w-full rounded-2xl bg-slate-800/40 border border-dashed border-white/[0.08] py-4 text-sm text-slate-600 hover:text-slate-400 hover:border-primary/30 transition-colors flex items-center justify-center gap-2"
@@ -286,17 +249,6 @@ export function EditMemoModal({
               </button>
             )}
           </section>
-
-          {/* 套用後顯示 tags（僅在無 aiSummary 時獨立顯示） */}
-          {aiDismissed && aiSuggestion && aiTags.length > 0 && !aiSummary && (
-            <div className="flex gap-1.5 flex-wrap -mt-2">
-              {aiTags.map(tag => (
-                <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
-                  #{tag}
-                </span>
-              ))}
-            </div>
-          )}
 
           {/* 標題 */}
           <section className="space-y-2">

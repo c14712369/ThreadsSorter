@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, X, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, MessageCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -27,8 +27,6 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
   const [categories, setCategories] = useState<any[]>([])
 
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
-  const [aiSuggestion, setAiSuggestion] = useState<{ summary: string; tags: string[]; categoryId?: string } | null>(null)
-  const [aiDismissed, setAiDismissed] = useState(false)
   const [aiSummary, setAiSummary] = useState('')
   const [aiTags, setAiTags] = useState<string[]>([])
 
@@ -52,8 +50,6 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       setPersonalNote('')
       setIsEssential(false)
       setCategoryId('')
-      setAiSuggestion(null)
-      setAiDismissed(false)
       setAiSummary('')
       setAiTags([])
       setIsLoading(false)
@@ -72,8 +68,8 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
     setError('')
     setImgError(false)
     setPreview(null)
-    setAiSuggestion(null)
-    setAiDismissed(false)
+    setAiSummary('')
+    setAiTags([])
     try {
       const isThreads = targetUrl.includes('threads.net') || targetUrl.includes('threads.com')
       const isIG = targetUrl.includes('instagram.com')
@@ -112,7 +108,6 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
 
-      // 用最新 categories state（非 closure 問題：透過 supabase 直接拿）
       const { data: cats } = await supabase.from('categories').select('*')
       const allCats = cats || []
       const matchedCat = allCats.find((c: any) =>
@@ -120,24 +115,15 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
           t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase())
         )
       )
-      setAiSuggestion({
-        summary: data.summary,
-        tags: data.tags || [],
-        categoryId: matchedCat?.id
-      })
+      // 直接套用，不詢問
+      setAiSummary(data.summary)
+      setAiTags(data.tags || [])
+      if (matchedCat?.id) setCategoryId(matchedCat.id)
     } catch {
       // Silent fail
     } finally {
       setIsGeneratingAI(false)
     }
-  }
-
-  const handleApplyAI = () => {
-    if (!aiSuggestion) return
-    setAiSummary(aiSuggestion.summary)
-    setAiTags(aiSuggestion.tags)
-    if (aiSuggestion.categoryId) setCategoryId(aiSuggestion.categoryId)
-    setAiDismissed(true)
   }
 
   const handleSave = async () => {
@@ -274,51 +260,33 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
             </section>
           )}
 
-          {/* AI 建議 */}
-          {!isLoading && preview && !aiDismissed && (
+          {/* AI 摘要 */}
+          {!isLoading && preview && (isGeneratingAI || aiSummary) && (
             <section className="space-y-2">
               <div className="flex items-center gap-2">
                 <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
-                <span className="text-sm font-black tracking-wider text-primary">AI 建議</span>
+                <span className="text-sm font-black tracking-wider text-primary">AI 摘要</span>
               </div>
-
               {isGeneratingAI ? (
                 <div className="rounded-2xl bg-slate-800/40 border border-white/[0.06] p-4 flex items-center gap-3">
                   <Loader2 size={16} className="animate-spin text-primary shrink-0" />
-                  <span className="text-sm text-slate-500">正在生成 AI 摘要…</span>
+                  <span className="text-sm text-slate-500">正在生成…</span>
                 </div>
-              ) : aiSuggestion ? (
-                <div className="rounded-2xl bg-slate-800/40 border border-primary/10 p-5 space-y-4">
-                  <p className="text-slate-100 text-base font-medium leading-relaxed">{aiSuggestion.summary}</p>
-
-                  <div className="flex items-center justify-end gap-4 border-t border-white/[0.06] pt-3">
-                    <button
-                      onClick={() => setAiDismissed(true)}
-                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                    >
-                      <X size={11} /> 忽略
-                    </button>
-                    <button
-                      onClick={handleApplyAI}
-                      className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-[#0B1120] rounded-full text-xs font-black active:scale-95 transition-transform"
-                    >
-                      <Sparkles size={11} /> 套用
-                    </button>
-                  </div>
+              ) : (
+                <div className="rounded-2xl bg-slate-800/40 border border-primary/10 px-4 py-3 space-y-2.5">
+                  <p className="text-slate-200 text-sm italic leading-relaxed">{aiSummary}</p>
+                  {aiTags.length > 0 && (
+                    <div className="flex gap-1.5 flex-wrap">
+                      {aiTags.map(tag => (
+                        <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : null}
+              )}
             </section>
-          )}
-
-          {/* Applied AI tags */}
-          {!isLoading && preview && aiDismissed && aiTags.length > 0 && (
-            <div className="flex gap-1.5 flex-wrap -mt-2">
-              {aiTags.map(tag => (
-                <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
-                  #{tag}
-                </span>
-              ))}
-            </div>
           )}
 
           {/* ─── Form fields (shown after parse) ─── */}
