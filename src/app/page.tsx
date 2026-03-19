@@ -18,7 +18,6 @@ import { cn } from '@/lib/utils'
 import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { CategoryManagerModal } from '@/components/CategoryManagerModal'
-import { MemoDetailModal } from '@/components/MemoDetailModal'
 
 // ── 分頁號碼計算 ────────────────────────────────────────────
 function getPageRange(current: number, total: number): (number | 'dot')[] {
@@ -36,10 +35,9 @@ function HomeContent() {
   const tab = searchParams.get('tab') || 'home'
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+  const [clipboardUrl, setClipboardUrl] = useState('')
   const [editingMemo, setEditingMemo] = useState<any>(null)
-  const [memoBeforeEdit, setMemoBeforeEdit] = useState<any>(null) // 從 detail 進 edit 時的暫存
   const [isCatModalOpen, setIsCatModalOpen] = useState(false)
-  const [selectedMemoDetail, setSelectedMemoDetail] = useState<any>(null)
 
   // ── 主頁資料 ──
   const [memos, setMemos] = useState<any[]>([])
@@ -185,14 +183,12 @@ function HomeContent() {
       setMemos(prev => prev.filter(m => m.id !== id))
       setAllMemos(prev => prev.filter(m => m.id !== id))
       setTotalCount(prev => prev - 1)
-      if (selectedMemoDetail?.id === id) setSelectedMemoDetail(null)
     }
   }
 
   const handleUpdateMemo = (updatedMemo: any) => {
     setMemos(prev => prev.map(m => m.id === updatedMemo.id ? updatedMemo : m))
     setAllMemos(prev => prev.map(m => m.id === updatedMemo.id ? updatedMemo : m))
-    if (selectedMemoDetail?.id === updatedMemo.id) setSelectedMemoDetail(updatedMemo)
   }
 
   const handleToggleEssential = async (id: string, is_essential: boolean) => {
@@ -207,7 +203,6 @@ function HomeContent() {
     } else {
       setAllMemos(prev => prev.map(m => m.id === id ? { ...m, is_essential } : m))
     }
-    if (selectedMemoDetail?.id === id) setSelectedMemoDetail((prev: any) => prev ? { ...prev, is_essential } : null)
     await supabase.from('memos').update({ is_essential }).eq('id', id)
   }
 
@@ -226,32 +221,12 @@ function HomeContent() {
   // ── 共用 Modals (所有 tab 共享) ──
   const sharedModals = (
     <>
-      <AddMemoModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onSuccess={fetchMemos} />
-      <MemoDetailModal
-        memo={selectedMemoDetail}
-        isOpen={!!selectedMemoDetail}
-        onClose={() => setSelectedMemoDetail(null)}
-        categoryName={categories.find(c => c.id === selectedMemoDetail?.category_id)?.name}
-        onDelete={handleDeleteMemo}
-        onToggleEssential={handleToggleEssential}
-        onToggleArchive={handleToggleArchive}
-        onEdit={(m) => { setMemoBeforeEdit(selectedMemoDetail); setSelectedMemoDetail(null); setEditingMemo(m) }}
-      />
+      <AddMemoModal isOpen={isAddModalOpen} onClose={() => { setIsAddModalOpen(false); setClipboardUrl('') }} onSuccess={fetchMemos} initialUrl={clipboardUrl} />
       <EditMemoModal
         isOpen={!!editingMemo}
         memo={editingMemo}
-        onClose={() => {
-          setEditingMemo(null)
-          // 取消編輯時，若是從 detail 進來的就回到 detail
-          if (memoBeforeEdit) {
-            setSelectedMemoDetail(memoBeforeEdit)
-            setMemoBeforeEdit(null)
-          }
-        }}
-        onUpdate={(updatedMemo) => {
-          handleUpdateMemo(updatedMemo)
-          setMemoBeforeEdit(null) // 儲存成功，清掉，不回 detail
-        }}
+        onClose={() => setEditingMemo(null)}
+        onUpdate={handleUpdateMemo}
         onDelete={handleDeleteMemo}
       />
       <CategoryManagerModal
@@ -283,7 +258,7 @@ function HomeContent() {
               <CategoryBoard
                 categories={categories}
                 memos={allMemos}
-                onDetail={setSelectedMemoDetail}
+                onDetail={setEditingMemo}
                 onDeleteMemo={handleDeleteMemo}
                 onToggleEssential={handleToggleEssential}
                 onManageCategories={() => setIsCatModalOpen(true)}
@@ -314,7 +289,7 @@ function HomeContent() {
             <div className="animate-in fade-in duration-300">
               <EssentialBoard
                 memos={allMemos}
-                onDetail={setSelectedMemoDetail}
+                onDetail={setEditingMemo}
                 onDeleteMemo={handleDeleteMemo}
                 onToggleEssential={handleToggleEssential}
               />
@@ -381,7 +356,7 @@ function HomeContent() {
           <input
             type="text"
             placeholder="搜尋收藏..."
-            className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-primary/30 transition-all placeholder:text-slate-600"
+            className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus:border-primary/30 transition-colors placeholder:text-slate-600"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
@@ -399,7 +374,7 @@ function HomeContent() {
                 key={tabItem.id}
                 onClick={tabItem.action}
                 className={cn(
-                  "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1.5 border shrink-0",
+                  "whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 border shrink-0",
                   tabItem.active
                     ? "bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20"
                     : "bg-white/5 text-slate-500 border-white/5 hover:border-white/10 hover:text-slate-300"
@@ -468,7 +443,7 @@ function HomeContent() {
                   key={memo.id}
                   memo={memo}
                   categoryName={categories.find(c => c.id === memo.category_id)?.name}
-                  onEdit={setSelectedMemoDetail}
+                  onEdit={setEditingMemo}
                   onDelete={handleDeleteMemo}
                   onToggleEssential={handleToggleEssential}
                   onToggleArchive={handleToggleArchive}
@@ -498,7 +473,7 @@ function HomeContent() {
                 key={p}
                 onClick={() => { setMemos([]); setPage((p as number) - 1) }}
                 className={cn(
-                  "w-8 h-8 rounded-lg text-xs font-bold transition-all",
+                  "w-8 h-8 rounded-lg text-xs font-bold transition-colors",
                   (p as number) - 1 === page
                     ? "bg-primary text-primary-foreground shadow-md shadow-primary/30"
                     : "text-slate-500 hover:text-white hover:bg-white/5"
@@ -521,7 +496,16 @@ function HomeContent() {
 
       {/* ── FAB ── */}
       <button
-        onClick={() => setIsAddModalOpen(true)}
+        onClick={async () => {
+          try {
+            const text = await navigator.clipboard.readText()
+            setClipboardUrl(text)
+          } catch {
+            setClipboardUrl('')
+          }
+          setIsAddModalOpen(true)
+        }}
+        aria-label="新增收藏"
         className={cn(
           "fixed bottom-[4.5rem] right-5 md:bottom-8 w-[3.25rem] h-[3.25rem] bg-primary text-primary-foreground rounded-full shadow-xl shadow-primary/25 z-[90] flex items-center justify-center group",
           "transition-all duration-300",

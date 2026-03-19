@@ -1,14 +1,18 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { X, Loader2, Sparkles, Tag, Star, User, MessageCircle } from 'lucide-react'
-import { Button } from './ui/Button'
-import { Card } from './ui/Card'
+import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, X, MessageCircle } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-
 import { useAuth } from '@/hooks/useAuth'
 
-export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: () => void }) {
+interface AddMemoModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: () => void
+  initialUrl?: string
+}
+
+export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemoModalProps) {
   const { user } = useAuth()
   const [url, setUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -16,44 +20,44 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
   const [error, setError] = useState('')
   const [preview, setPreview] = useState<any>(null)
   const [imgError, setImgError] = useState(false)
-  
+
   const [categoryId, setCategoryId] = useState('')
   const [personalNote, setPersonalNote] = useState('')
   const [isEssential, setIsEssential] = useState(false)
   const [categories, setCategories] = useState<any[]>([])
 
-  const [isManualMode, setIsManualMode] = useState(false)
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<{ summary: string; tags: string[]; categoryId?: string } | null>(null)
+  const [aiDismissed, setAiDismissed] = useState(false)
+  const [aiSummary, setAiSummary] = useState('')
+  const [aiTags, setAiTags] = useState<string[]>([])
 
-  const getImageUrl = (url?: string) => {
-    if (!url) return null
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  const getImageUrl = (u?: string) => {
+    if (!u) return null
+    return `/api/image-proxy?url=${encodeURIComponent(u)}`
   }
 
   useEffect(() => {
     if (isOpen) {
       fetchCategories()
-      
-      // 自動讀取剪貼簿並填寫
-      navigator.clipboard.readText()
-        .then(text => {
-          if (text && (text.includes('threads.net') || text.includes('instagram.com'))) {
-            setUrl(text)
-            fetchMetadata(text)
-          }
-        })
-        .catch(err => {
-          console.log('無法讀取剪貼簿 (可能用戶未授權):', err)
-        })
+      if (initialUrl && (initialUrl.includes('threads.net') || initialUrl.includes('instagram.com') || initialUrl.includes('threads.com'))) {
+        setUrl(initialUrl)
+        fetchMetadata(initialUrl)
+      }
     } else {
-      // 關閉時清空狀態，避免下次打開時殘留
       setUrl('')
       setPreview(null)
       setError('')
       setImgError(false)
-      setIsGeneratingAI(false)
       setPersonalNote('')
       setIsEssential(false)
+      setCategoryId('')
+      setAiSuggestion(null)
+      setAiDismissed(false)
+      setAiSummary('')
+      setAiTags([])
+      setIsLoading(false)
+      setIsGeneratingAI(false)
     }
   }, [isOpen])
 
@@ -67,6 +71,9 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
     setIsLoading(true)
     setError('')
     setImgError(false)
+    setPreview(null)
+    setAiSuggestion(null)
+    setAiDismissed(false)
     try {
       const isThreads = targetUrl.includes('threads.net') || targetUrl.includes('threads.com')
       const isIG = targetUrl.includes('instagram.com')
@@ -80,61 +87,57 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setPreview(data)
+      // 解析完自動觸發 AI
+      generateAI(data)
     } catch (err: any) {
       setError(err.message || '解析失敗')
-      setPreview({
-        author_handle: '',
-        content_snippet: '',
-        preview_image: '',
-        url: targetUrl
-      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleManualEntry = () => {
-    setPreview({
-      author_handle: '',
-      content_snippet: '',
-      preview_image: '',
-      url: url || ''
-    })
-    setImgError(false)
-  }
-
-  const handleGenerateSummary = async () => {
-    if (!preview) return
+  const generateAI = async (parsedData: any) => {
+    if (!parsedData?.content_snippet) return
     setIsGeneratingAI(true)
-    setError('')
     try {
       const res = await fetch('/api/generate-summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          url: preview.url || url, 
-          snippet: preview.content_snippet,
-          title: preview.author_handle
+        body: JSON.stringify({
+          url: parsedData.url,
+          snippet: parsedData.content_snippet,
+          title: parsedData.author_handle
         })
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'AI 摘要產生失敗')
+      if (!res.ok) throw new Error(data.error)
 
-      setPersonalNote(data.summary)
-
-      if (data.tags && data.tags.length > 0) {
-        const matchedCategory = categories.find(c => 
-          data.tags.some((t: string) => t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase()))
+      // 用最新 categories state（非 closure 問題：透過 supabase 直接拿）
+      const { data: cats } = await supabase.from('categories').select('*')
+      const allCats = cats || []
+      const matchedCat = allCats.find((c: any) =>
+        data.tags?.some((t: string) =>
+          t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase())
         )
-        if (matchedCategory) {
-          setCategoryId(matchedCategory.id)
-        }
-      }
-    } catch (err: any) {
-      setError(err.message || 'AI 處理錯誤')
+      )
+      setAiSuggestion({
+        summary: data.summary,
+        tags: data.tags || [],
+        categoryId: matchedCat?.id
+      })
+    } catch {
+      // Silent fail
     } finally {
       setIsGeneratingAI(false)
     }
+  }
+
+  const handleApplyAI = () => {
+    if (!aiSuggestion) return
+    setAiSummary(aiSuggestion.summary)
+    setAiTags(aiSuggestion.tags)
+    if (aiSuggestion.categoryId) setCategoryId(aiSuggestion.categoryId)
+    setAiDismissed(true)
   }
 
   const handleSave = async () => {
@@ -142,19 +145,16 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
     setIsSaving(true)
     setError('')
 
-    const { error: insertError } = await supabase
-      .from('memos')
-      .insert([
-        {
-          user_id: user.id,
-          ...preview,
-          url: url || preview?.url,
-          category_id: categoryId || null,
-          personal_note: personalNote,
-          is_essential: isEssential,
-          ai_tags: [] 
-        }
-      ])
+    const { error: insertError } = await supabase.from('memos').insert([{
+      user_id: user.id,
+      ...preview,
+      url: url || preview.url,
+      category_id: categoryId || null,
+      personal_note: personalNote || null,
+      is_essential: isEssential,
+      ai_summary: aiSummary || null,
+      ai_tags: aiTags
+    }])
 
     if (insertError) {
       setError(insertError.message)
@@ -163,207 +163,241 @@ export function AddMemoModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, 
     }
 
     onSuccess()
-    
-    // Reset state
-    setPreview(null)
-    setCategoryId('')
-    setPersonalNote('')
-    setIsEssential(false)
-    setUrl('')
-    setError('')
-    setImgError(false)
-    setIsSaving(false)
     onClose()
+    setIsSaving(false)
   }
+
+  const isThreadsSrc = url.includes('threads.net') || url.includes('threads.com')
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <Card className="w-full max-w-lg p-6 space-y-6 shadow-2xl border-primary/20 bg-slate-900">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Sparkles className="text-primary" size={24} />
-            新增精華
-          </h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X size={20} />
-          </Button>
-        </div>
+    <div className="fixed inset-0 z-[100] bg-[#0B1120] flex flex-col">
 
-        <div className="space-y-4">
-          {!preview ? (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm text-slate-400 font-medium tracking-wide">貼上連結 (Threads / IG)</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    placeholder="https://www.threads.net/..."
-                    className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-all text-sm"
-                    value={url}
-                    onChange={(e) => {
-                      const newUrl = e.target.value
-                      setUrl(newUrl)
-                      if (newUrl.includes('threads.net') || newUrl.includes('instagram.com')) {
-                        fetchMetadata(newUrl)
-                      }
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && fetchMetadata(url)}
-                  />
-                  <Button 
-                    onClick={() => fetchMetadata(url)} 
-                    disabled={isLoading || !url}
-                    className="shrink-0 px-6 rounded-xl font-bold"
-                  >
-                    {isLoading ? <Loader2 className="animate-spin" size={20} /> : '解析'}
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="flex items-center gap-4 py-2">
-                <div className="flex-1 h-px bg-slate-800" />
-                <span className="text-xs text-slate-600 font-medium uppercase tracking-widest">或</span>
-                <div className="flex-1 h-px bg-slate-800" />
-              </div>
+      {/* ── Header ── */}
+      <div
+        className="shrink-0 flex items-center justify-between px-5 border-b border-white/[0.06]"
+        style={{ paddingTop: 'max(env(safe-area-inset-top), 16px)', paddingBottom: '16px' }}
+      >
+        <button
+          onClick={onClose}
+          aria-label="返回"
+          className="p-2 -ml-2 text-slate-400 hover:text-white transition-colors rounded-xl active:scale-95"
+        >
+          <ArrowLeft size={22} />
+        </button>
+        <h1 className="text-lg font-black text-white tracking-tight">快速新增</h1>
+        <button
+          onClick={handleSave}
+          disabled={!preview || isSaving}
+          className="px-5 py-2 bg-primary text-[#0B1120] rounded-full text-sm font-black disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95 transition-transform"
+        >
+          {isSaving ? <Loader2 size={14} className="animate-spin" /> : '儲存'}
+        </button>
+      </div>
 
-              <Button 
-                variant="ghost" 
-                className="w-full py-4 border border-dashed border-slate-800 text-slate-400 hover:text-white hover:border-slate-600 rounded-xl text-xs font-bold transition-all"
-                onClick={handleManualEntry}
-              >
-                直接手動輸入資訊
-              </Button>
+      {/* ── Scrollable Body ── */}
+      <div className="flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' } as any}>
+        <div
+          className="px-5 pt-5 space-y-6"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 32px)' }}
+        >
+
+          {/* 連結 */}
+          <section className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Link2 size={14} className="text-primary" strokeWidth={2.5} />
+              <span className="text-sm font-black tracking-wider text-primary">連結</span>
             </div>
-          ) : (
-            <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-400">
-              {/* Preview & Edit Box */}
-              <div className="space-y-4 p-5 bg-slate-800/30 rounded-2xl border border-slate-700/50 backdrop-blur-sm">
-                <div className="flex gap-5">
-                  <div className="shrink-0">
-                    {preview.preview_image && !imgError ? (
-                      <img 
-                        src={getImageUrl(preview.preview_image)!}
-                        referrerPolicy="no-referrer"
-                        onError={() => setImgError(true)}
-                        className="w-20 h-20 rounded-xl object-cover border border-slate-700 shadow-xl" 
-                      />
-                    ) : (
-                      <div className="w-20 h-20 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-700">
-                        <MessageCircle size={32} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-primary/80 uppercase font-black tracking-widest flex items-center gap-1">
-                        <User size={10} /> 作者帳號 (可修改)
-                      </label>
-                      <input 
-                        type="text"
-                        className="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-white font-bold text-sm focus:outline-none focus:border-primary transition-all ring-offset-slate-900 focus:ring-1 focus:ring-primary/30"
-                        placeholder="@username"
-                        value={preview.author_handle || ''}
-                        onChange={(e) => setPreview({ ...preview, author_handle: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] text-slate-500 uppercase font-black tracking-widest flex items-center gap-1">
-                        <Sparkles size={10} /> 內容摘要
-                      </label>
-                      <textarea 
-                        className="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-primary min-h-[100px] leading-relaxed transition-all"
-                        placeholder="擷取到的內容將顯示在此..."
-                        value={preview.content_snippet}
-                        onChange={(e) => setPreview({ ...preview, content_snippet: e.target.value })}
-                      />
-                    </div>
-                  </div>
+            <div className="flex items-center gap-3 bg-slate-800/60 border border-white/[0.06] rounded-2xl px-4 py-3.5">
+              <Link2 size={15} className="text-slate-600 shrink-0" />
+              <input
+                type="url"
+                placeholder="https://www.threads.net/..."
+                className="flex-1 bg-transparent text-sm text-white placeholder:text-slate-600 focus:outline-none min-w-0"
+                value={url}
+                onChange={(e) => {
+                  const v = e.target.value
+                  setUrl(v)
+                  if (v.includes('threads.net') || v.includes('threads.com') || v.includes('instagram.com')) {
+                    fetchMetadata(v)
+                  }
+                }}
+              />
+            </div>
+          </section>
+
+          {/* Loading skeleton */}
+          {isLoading && (
+            <div className="rounded-2xl bg-slate-800/40 border border-white/[0.06] overflow-hidden animate-pulse">
+              <div className="h-52 bg-slate-800/80" />
+              <div className="p-4 space-y-3">
+                <div className="h-3 w-16 bg-slate-700 rounded-full" />
+                <div className="h-4 w-2/3 bg-slate-700 rounded-full" />
+                <div className="h-3 w-full bg-slate-700/50 rounded-full" />
+                <div className="h-3 w-4/5 bg-slate-700/40 rounded-full" />
+              </div>
+            </div>
+          )}
+
+          {/* Preview Card */}
+          {!isLoading && preview && (
+            <section className="rounded-2xl bg-slate-800/40 border border-white/[0.06] overflow-hidden">
+              {preview.preview_image && !imgError ? (
+                <div className="w-full h-52 bg-slate-800 overflow-hidden">
+                  <img
+                    src={getImageUrl(preview.preview_image)!}
+                    alt="Preview"
+                    onError={() => setImgError(true)}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
+              ) : (
+                <div className="w-full h-32 bg-slate-800/80 flex items-center justify-center text-slate-700">
+                  <MessageCircle size={40} />
+                </div>
+              )}
+              <div className="p-4 space-y-2">
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20 tracking-wider">
+                  {isThreadsSrc ? 'Threads' : 'Instagram'}
+                </span>
+                <p className="text-white text-sm font-semibold leading-snug">
+                  {preview.author_handle}
+                  {preview.author_bio && (
+                    <span className="text-slate-400 font-normal"> · {preview.author_bio}</span>
+                  )}
+                </p>
+                {preview.content_snippet && (
+                  <p className="text-slate-400 text-sm leading-relaxed line-clamp-3">{preview.content_snippet}</p>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* AI 建議 */}
+          {!isLoading && preview && !aiDismissed && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
+                <span className="text-sm font-black tracking-wider text-primary">AI 建議</span>
               </div>
 
-              {/* Form Fields */}
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500 font-medium uppercase tracking-wider flex items-center gap-1.5">
-                    <Tag size={12} /> 選擇分類
-                  </label>
-                  <select 
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary appearance-none"
+              {isGeneratingAI ? (
+                <div className="rounded-2xl bg-slate-800/40 border border-white/[0.06] p-4 flex items-center gap-3">
+                  <Loader2 size={16} className="animate-spin text-primary shrink-0" />
+                  <span className="text-sm text-slate-500">正在生成 AI 摘要…</span>
+                </div>
+              ) : aiSuggestion ? (
+                <div className="rounded-2xl bg-slate-800/40 border border-primary/10 p-5 space-y-4">
+                  <p className="text-slate-100 text-base font-medium leading-relaxed">{aiSuggestion.summary}</p>
+
+                  <div className="flex items-center justify-end gap-4 border-t border-white/[0.06] pt-3">
+                    <button
+                      onClick={() => setAiDismissed(true)}
+                      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      <X size={11} /> 忽略
+                    </button>
+                    <button
+                      onClick={handleApplyAI}
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-[#0B1120] rounded-full text-xs font-black active:scale-95 transition-transform"
+                    >
+                      <Sparkles size={11} /> 套用
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          )}
+
+          {/* Applied AI tags */}
+          {!isLoading && preview && aiDismissed && aiTags.length > 0 && (
+            <div className="flex gap-1.5 flex-wrap -mt-2">
+              {aiTags.map(tag => (
+                <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* ─── Form fields (shown after parse) ─── */}
+          {!isLoading && preview && (
+            <>
+              {/* 標題 */}
+              <section className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black text-primary font-mono">T</span>
+                  <span className="text-sm font-black tracking-wider text-primary">標題</span>
+                </div>
+                <textarea
+                  className="w-full bg-slate-800/60 border border-white/[0.06] rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-none leading-relaxed min-h-[80px] transition-colors"
+                  value={preview.content_snippet}
+                  onChange={(e) => setPreview({ ...preview, content_snippet: e.target.value })}
+                />
+              </section>
+
+              {/* 註解 */}
+              <section className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-black tracking-wider text-primary">📝</span>
+                  <span className="text-sm font-black tracking-wider text-primary">註解</span>
+                  <span className="text-[10px] text-slate-600 font-bold px-1.5 py-0.5 bg-slate-800 rounded-md tracking-wider">選填</span>
+                </div>
+                <textarea
+                  className="w-full bg-slate-800/60 border border-white/[0.06] rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-none leading-relaxed min-h-[80px] transition-colors"
+                  placeholder="加入你的想法或備註…"
+                  value={personalNote}
+                  onChange={(e) => setPersonalNote(e.target.value)}
+                />
+              </section>
+
+              {/* 分類 */}
+              <section className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Folder size={14} className="text-primary" strokeWidth={2.5} />
+                  <span className="text-sm font-black tracking-wider text-primary">分類</span>
+                </div>
+                <div className="relative inline-block">
+                  <select
+                    className="bg-slate-800/60 border border-white/[0.06] rounded-full pl-4 pr-9 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 appearance-none transition-colors"
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
                   >
-                    <option value="">未分類</option>
+                    <option value="">選擇分類</option>
                     {categories.map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
                   </select>
+                  <Folder size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                 </div>
+              </section>
 
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-slate-500 font-medium uppercase tracking-wider">備註</label>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="h-6 px-2 text-[10px] text-primary hover:text-primary hover:bg-primary/10 gap-1 rounded-md"
-                      onClick={handleGenerateSummary}
-                      disabled={isGeneratingAI || !preview.content_snippet}
-                    >
-                      {isGeneratingAI ? <Loader2 className="animate-spin" size={12} /> : <Sparkles size={12} />}
-                      AI 總結與分類
-                    </Button>
+              {/* 精華 */}
+              <section>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div className={`w-11 h-6 rounded-full transition-colors relative shrink-0 ${isEssential ? 'bg-primary' : 'bg-slate-700'}`}>
+                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isEssential ? 'translate-x-5' : ''}`} />
                   </div>
-                  <textarea 
-                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary min-h-[80px]"
-                    placeholder="輸入個人心得或重點描述..."
-                    value={personalNote}
-                    onChange={(e) => setPersonalNote(e.target.value)}
-                  />
-                </div>
-
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <div className={`w-10 h-6 rounded-full transition-colors relative ${isEssential ? 'bg-primary' : 'bg-amber-500/20'}`}>
-                    <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${isEssential ? 'translate-x-4' : ''}`} />
-                  </div>
-                  <input 
-                    type="checkbox" 
-                    className="hidden" 
-                    checked={isEssential} 
-                    onChange={(e) => setIsEssential(e.target.checked)} 
-                  />
-                  <span className={`text-sm font-medium transition-colors flex items-center gap-1.5 ${isEssential ? 'text-amber-400' : 'text-slate-400 group-hover:text-slate-300'}`}>
+                  <input type="checkbox" className="hidden" checked={isEssential} onChange={(e) => setIsEssential(e.target.checked)} />
+                  <span className={`text-sm font-medium flex items-center gap-1.5 transition-colors ${isEssential ? 'text-amber-400' : 'text-slate-400'}`}>
                     <Star size={14} className={isEssential ? 'text-amber-400' : ''} fill={isEssential ? 'currentColor' : 'none'} />
-                    標記為精華
+                    標記精華
                   </span>
                 </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2">
-                <Button variant="secondary" className="w-full py-3" onClick={() => { setPreview(null); setImgError(false) }}>
-                  重新輸入
-                </Button>
-                <Button className="w-full py-3 shadow-lg shadow-primary/20" onClick={handleSave}>
-                  確認儲存
-                </Button>
-              </div>
-            </div>
+              </section>
+            </>
           )}
 
-          {isLoading && (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="animate-spin text-primary" size={32} />
-              <span className="ml-3 text-slate-400">正在解析內容...</span>
-            </div>
-          )}
-
+          {/* Error */}
           {error && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-lg text-sm">
+            <div className="p-4 bg-rose-500/10 border border-rose-500/20 text-rose-400 rounded-2xl text-sm">
               {error}
             </div>
           )}
+
         </div>
-      </Card>
+      </div>
     </div>
   )
 }

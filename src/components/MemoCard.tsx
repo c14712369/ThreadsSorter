@@ -45,7 +45,7 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
   if (isHighlightMode) {
     return (
       <Card 
-        className="group relative overflow-hidden cursor-pointer border-slate-800 bg-slate-900/40 hover:bg-slate-800 transition-all hover:shadow-2xl hover:shadow-primary/10"
+        className="group relative overflow-hidden cursor-pointer border-slate-800 bg-slate-900/40 hover:bg-slate-800 transition-colors hover:shadow-2xl hover:shadow-primary/10"
         onClick={() => onEdit?.(memo)}
       >
         {memo.preview_image && (
@@ -67,7 +67,7 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
           </div>
 
           <p className="text-lg font-medium text-slate-100 leading-relaxed line-clamp-3">
-            {memo.ai_summary || memo.personal_note || memo.content_snippet}
+            {memo.content_snippet || memo.ai_summary || memo.personal_note}
           </p>
 
           <div className="flex items-center justify-between pt-2">
@@ -82,7 +82,8 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
                 e.stopPropagation()
                 if (confirm('確定要刪除這篇珍藏嗎？')) onDelete?.(memo.id)
               }}
-              className="p-1.5 text-slate-600 hover:text-rose-400 transition-all"
+              aria-label="刪除"
+            className="p-1.5 text-slate-600 hover:text-rose-400 transition-colors"
             >
               <Trash2 size={16} />
             </button>
@@ -104,6 +105,7 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
               onToggleArchive?.(memo.id, !memo.is_archived)
               x.set(0)
             }}
+            aria-label={memo.is_archived ? '移回' : '封存'}
             className="h-full w-20 flex flex-col items-center justify-center bg-emerald-600 text-white gap-1"
           >
             <Archive size={20} />
@@ -116,6 +118,7 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
               e.stopPropagation()
               if (confirm('確定要刪除這篇珍藏嗎？')) onDelete?.(memo.id)
             }}
+            aria-label="刪除"
             className="h-full w-20 flex flex-col items-center justify-center bg-rose-500 text-white gap-1"
           >
             <Trash2 size={20} />
@@ -147,7 +150,7 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
                 src={getImageUrl(memo.preview_image)!}
                 alt="Preview"
                 onError={() => setImgError(true)}
-                className="w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-all duration-500 group-hover:scale-105"
+                className="w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-[filter,transform] duration-500 group-hover:scale-105"
               />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center opacity-20">
@@ -162,27 +165,22 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
             )}
           </div>
 
-          {/* 右側：上下各 50% */}
-          <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-            {/* 上半：作者帳號 | 自我介紹 */}
-            <div className="flex-1 flex items-center px-3.5 gap-1.5 border-b border-slate-800/60 overflow-hidden">
-              <span className="text-[11px] font-black text-primary shrink-0 max-w-[45%] truncate">
+          {/* 右側 */}
+          <div className="flex-1 flex flex-col justify-center px-3.5 py-3 gap-1.5 min-w-0 overflow-hidden">
+            {/* 作者 + bio */}
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="text-[11px] font-black text-primary shrink-0 max-w-[50%] truncate">
                 @{memo.author_handle}
               </span>
               {memo.author_bio && (
-                <>
-                  <span className="text-slate-700 shrink-0 text-xs">|</span>
-                  <span className="text-[11px] text-slate-500 truncate">{memo.author_bio}</span>
-                </>
+                <span className="text-[10px] text-slate-600 truncate min-w-0">{memo.author_bio}</span>
               )}
             </div>
 
-            {/* 下半：文章摘要 */}
-            <div className="flex-1 flex items-center px-3.5 overflow-hidden">
-              <p className="text-sm font-medium text-slate-200 truncate">
-                {memo.ai_summary || memo.personal_note || memo.content_snippet}
-              </p>
-            </div>
+            {/* 內文（2 行）*/}
+            <p className="text-sm font-medium text-slate-200 leading-snug line-clamp-2">
+              {memo.content_snippet || memo.ai_summary || memo.personal_note}
+            </p>
           </div>
         </Card>
       </motion.div>

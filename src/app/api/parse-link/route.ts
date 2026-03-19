@@ -99,24 +99,40 @@ export async function POST(req: Request) {
       if (hp) authorHandle = hp.replace('@', '')
     }
 
-    // 4. 抓取作者 Bio
+    // 4. 抓取作者 Bio 與大頭貼
     let authorBio = ''
+    let authorAvatar = ''
     if (authorHandle && isThreads) {
       try {
         const pRes = await fetch(`https://www.threads.net/@${authorHandle}`, {
           headers: { 'User-Agent': 'facebookexternalhit/1.1' }
         })
         if (pRes.ok) {
-          const $p = cheerio.load(await pRes.text())
+          const profileHtml = await pRes.text()
+          const $p = cheerio.load(profileHtml)
           const raw = $p('meta[property="og:description"]').attr('content') || ''
+
           // 格式: "3.7K Followers • 7.8K Threads • 真正的自我介紹 See the latest..."
           // 以 • 分割後，前兩段是追蹤數統計，第三段起才是自介
           const parts = raw.split('•')
-          const bioRaw = parts.length >= 3
-            ? parts.slice(2).join('•')  // 保留自介中可能含有的 • 符號
-            : raw
-          // 移除結尾的 "See the latest conversations..." 說明文字
-          authorBio = bioRaw.replace(/\s*See the latest\b.*/i, '').trim()
+          if (parts.length >= 3) {
+            const bioRaw = parts.slice(2).join('•')
+            const bioClean = bioRaw.replace(/\s*See the latest\b.*/i, '').trim()
+            if (bioClean) {
+              authorBio = bioClean
+            } else {
+              // 無自介，改用追蹤數與發文數作為替代資訊
+              const followers = parts[0].trim()
+              const posts = parts[1].trim()
+              authorBio = `${followers} · ${posts}`
+            }
+          } else {
+            authorBio = raw.replace(/\s*See the latest\b.*/i, '').trim()
+          }
+
+          // 大頭貼：從 og:image 抓（-19/ 路徑即為大頭貼）
+          const ogImg = $p('meta[property="og:image"]').attr('content') || ''
+          if (ogImg) authorAvatar = ogImg
         }
       } catch (e) {}
     }
@@ -128,6 +144,11 @@ export async function POST(req: Request) {
     // 6. 清理圖片 URL（移除強制下載參數）
     if (previewImage) {
       previewImage = previewImage.replace(/[&?]dl=1/g, '').replace(/\)+$/, '')
+    }
+
+    // 若無貼文圖，改用作者大頭貼作為 preview_image
+    if (!previewImage && authorAvatar) {
+      previewImage = authorAvatar
     }
 
     // 直接儲存 URL，由前端 image-proxy 處理 CORS
