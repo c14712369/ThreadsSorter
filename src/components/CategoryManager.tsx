@@ -162,7 +162,7 @@ export function CategoryManager({
       )}
 
       {/* 分類列表 */}
-      <div className="flex flex-col gap-1.5 max-h-[300px] overflow-y-auto no-scrollbar">
+      <div className="flex flex-col gap-1.5 h-56 overflow-y-auto overscroll-contain pr-0.5">
         {localCats.map(cat => (
           <CategoryItem
             key={cat.id}

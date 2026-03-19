@@ -34,10 +34,10 @@ export function CategoryManagerModal({
         </div>
 
         <div className="bg-slate-950/30 rounded-2xl p-4 border border-slate-800">
-          <CategoryManager 
-            userId={userId} 
-            categories={categories} 
-            onCategoriesChange={onCategoriesChange} 
+          <CategoryManager
+            userId={userId}
+            categories={categories}
+            onCategoriesChange={onCategoriesChange}
           />
         </div>
 

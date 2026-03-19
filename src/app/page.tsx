@@ -456,7 +456,7 @@ function HomeContent() {
 
       {/* ── 分頁 ── */}
       {hasPagination && (
-        <div className="shrink-0 flex items-center justify-center gap-1 px-5 py-2 pb-[5.5rem] md:pb-3 border-t border-white/[0.04]">
+        <div className="shrink-0 flex items-center justify-center gap-1 px-5 py-2 pb-3 border-t border-white/[0.04]">
           <button
             disabled={page === 0}
             onClick={() => { setMemos([]); setPage(p => p - 1) }}
@@ -507,7 +507,7 @@ function HomeContent() {
         }}
         aria-label="新增收藏"
         className={cn(
-          "fixed bottom-[4.5rem] right-5 md:bottom-8 w-[3.25rem] h-[3.25rem] bg-primary text-primary-foreground rounded-full shadow-xl shadow-primary/25 z-[90] flex items-center justify-center group",
+          "fixed bottom-6 right-5 w-[3.25rem] h-[3.25rem] bg-primary text-primary-foreground rounded-full shadow-xl shadow-primary/25 z-[90] flex items-center justify-center group",
           "transition-all duration-300",
           fabVisible ? "translate-y-0 opacity-100 scale-100" : "translate-y-4 opacity-0 scale-90 pointer-events-none"
         )}
