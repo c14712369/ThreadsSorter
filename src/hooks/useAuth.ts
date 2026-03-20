@@ -21,7 +21,20 @@ export function useAuth() {
       setLoading(false)
     })
 
-    return () => subscription.unsubscribe()
+    // 當 app 從背景回到前景時重新驗證（解決 PWA 長時間背景後誤判登出）
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          setUser(session?.user ?? null)
+        })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   return { user, loading }

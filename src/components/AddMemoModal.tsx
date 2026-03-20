@@ -35,12 +35,23 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
     return `/api/image-proxy?url=${encodeURIComponent(u)}`
   }
 
+  const isSupportedUrl = (u: string) =>
+    u.includes('threads.net') || u.includes('instagram.com') || u.includes('threads.com')
+
   useEffect(() => {
     if (isOpen) {
       fetchCategories()
-      if (initialUrl && (initialUrl.includes('threads.net') || initialUrl.includes('instagram.com') || initialUrl.includes('threads.com'))) {
+      if (initialUrl && isSupportedUrl(initialUrl)) {
         setUrl(initialUrl)
         fetchMetadata(initialUrl)
+      } else {
+        // FAB 的剪貼簿讀取在手機上可能失敗，modal 開啟時再試一次
+        navigator.clipboard.readText().then((text) => {
+          if (text && isSupportedUrl(text)) {
+            setUrl(text)
+            fetchMetadata(text)
+          }
+        }).catch(() => {})
       }
     } else {
       setUrl('')
