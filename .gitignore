@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 本地開發用檔案
+debug_images.js
+UI參考/
+.claude/
