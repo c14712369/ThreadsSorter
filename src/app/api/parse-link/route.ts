@@ -34,57 +34,38 @@ export async function POST(req: Request) {
     const urlObj = new URL(cleanUrl)
     const isThreads = urlObj.hostname.includes('threads.net')
 
-    let previewImage = ''
+    // --- 策略 A & B 並行 ---
+    const embedUrl = cleanUrl.replace(/\/$/, '') + '/embed/'
+
+    const [embedResult, mainResult] = await Promise.allSettled([
+      // 策略 A: embed 頁面（抓貼文圖）
+      isThreads
+        ? fetch(embedUrl, { headers: { 'User-Agent': BOT_UA } }).then(r => r.ok ? r.text() : '')
+        : Promise.resolve(''),
+      // 策略 B: 主頁面（抓 title / description / 圖片 fallback）
+      fetch(cleanUrl, {
+        headers: { 'User-Agent': BOT_UA, 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' }
+      }).then(r => r.ok ? r.text() : '')
+    ])
+
+    const embedHtml = embedResult.status === 'fulfilled' ? embedResult.value : ''
+    const mainHtml  = mainResult.status  === 'fulfilled' ? mainResult.value  : ''
+
+    let previewImage = extractPostImage(embedHtml)
     let title = ''
     let description = ''
 
-    // --- 策略 A: Threads /embed/ 頁面（最可靠，能拿到多圖的第一張）---
-    if (isThreads) {
-      try {
-        const embedUrl = cleanUrl.replace(/\/$/, '') + '/embed/'
-        const embedRes = await fetch(embedUrl, {
-          headers: { 'User-Agent': BOT_UA }
-        })
-        if (embedRes.ok) {
-          const embedHtml = await embedRes.text()
-          previewImage = extractPostImage(embedHtml)
+    if (mainHtml) {
+      const $ = cheerio.load(mainHtml)
+      title       = $('meta[property="og:title"]').attr('content') || $('title').text() || ''
+      description = $('meta[property="og:description"]').attr('content') || ''
+
+      if (!previewImage) previewImage = extractPostImage(mainHtml)
+      if (!previewImage) {
+        const ogImg = $('meta[property="og:image"]').attr('content') || ''
+        if (ogImg && !ogImg.includes('t51.2885-19') && !ogImg.includes('-19/')) {
+          previewImage = ogImg
         }
-      } catch (e) {
-        console.log('embed fetch failed:', e)
-      }
-    }
-
-    // --- 策略 B: 主頁面爬蟲（取 title / description，順帶再試一次圖片）---
-    if (!description) {
-      try {
-        const response = await fetch(cleanUrl, {
-          headers: {
-            'User-Agent': BOT_UA,
-            'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8'
-          }
-        })
-        if (response.ok) {
-          const html = await response.text()
-          const $ = cheerio.load(html)
-
-          title = $('meta[property="og:title"]').attr('content') || $('title').text() || ''
-          description = $('meta[property="og:description"]').attr('content') || ''
-
-          // 若 embed 沒抓到圖，從主頁 HTML 再試
-          if (!previewImage) {
-            previewImage = extractPostImage(html)
-          }
-
-          // 最後 fallback：og:image（但 Threads 通常給大頭貼，需過濾）
-          if (!previewImage) {
-            const ogImg = $('meta[property="og:image"]').attr('content') || ''
-            if (ogImg && !ogImg.includes('t51.2885-19') && !ogImg.includes('-19/')) {
-              previewImage = ogImg
-            }
-          }
-        }
-      } catch (e) {
-        console.log('main page fetch failed:', e)
       }
     }
 
@@ -112,8 +93,6 @@ export async function POST(req: Request) {
           const $p = cheerio.load(profileHtml)
           const raw = $p('meta[property="og:description"]').attr('content') || ''
 
-          // 格式: "3.7K Followers • 7.8K Threads • 真正的自我介紹 See the latest..."
-          // 以 • 分割後，前兩段是追蹤數統計，第三段起才是自介
           const parts = raw.split('•')
           if (parts.length >= 3) {
             const bioRaw = parts.slice(2).join('•')
@@ -121,16 +100,12 @@ export async function POST(req: Request) {
             if (bioClean) {
               authorBio = bioClean
             } else {
-              // 無自介，改用追蹤數與發文數作為替代資訊
-              const followers = parts[0].trim()
-              const posts = parts[1].trim()
-              authorBio = `${followers} · ${posts}`
+              authorBio = `${parts[0].trim()} · ${parts[1].trim()}`
             }
           } else {
             authorBio = raw.replace(/\s*See the latest\b.*/i, '').trim()
           }
 
-          // 大頭貼：從 og:image 抓（-19/ 路徑即為大頭貼）
           const ogImg = $p('meta[property="og:image"]').attr('content') || ''
           if (ogImg) authorAvatar = ogImg
         }

@@ -25,7 +25,16 @@ html, body {
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Cactus Classical Serif", "Noto Serif TC", serif;
+  font-weight: 500;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 /* 防止 iOS Safari 在點擊輸入框時自動放大 */

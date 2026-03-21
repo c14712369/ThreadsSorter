@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, MessageCircle } from 'lucide-react'
+import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, MessageCircle, X, Plus, Check, ChevronRight } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -29,6 +29,29 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
   const [isGeneratingAI, setIsGeneratingAI] = useState(false)
   const [aiSummary, setAiSummary] = useState('')
   const [aiTags, setAiTags] = useState<string[]>([])
+
+  const [isCatSheetOpen, setIsCatSheetOpen] = useState(false)
+  const [isAddCatOpen, setIsAddCatOpen] = useState(false)
+  const [newCatName, setNewCatName] = useState('')
+  const [isSavingCat, setIsSavingCat] = useState(false)
+
+  const handleAddCategory = async () => {
+    const name = newCatName.trim()
+    if (!name || !user) return
+    setIsSavingCat(true)
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([{ name, user_id: user.id }])
+      .select()
+      .single()
+    if (!error && data) {
+      setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setCategoryId(data.id)
+    }
+    setNewCatName('')
+    setIsAddCatOpen(false)
+    setIsSavingCat(false)
+  }
 
   const getImageUrl = (u?: string) => {
     if (!u) return null
@@ -65,6 +88,9 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       setAiTags([])
       setIsLoading(false)
       setIsGeneratingAI(false)
+      setIsCatSheetOpen(false)
+      setIsAddCatOpen(false)
+      setNewCatName('')
     }
   }, [isOpen])
 
@@ -337,19 +363,18 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
                   <Folder size={14} className="text-primary" strokeWidth={2.5} />
                   <span className="text-sm font-black tracking-wider text-primary">分類</span>
                 </div>
-                <div className="relative inline-block">
-                  <select
-                    className="bg-slate-800/60 border border-white/[0.06] rounded-full pl-4 pr-9 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 appearance-none transition-colors"
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                  >
-                    <option value="">選擇分類</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                  </select>
-                  <Folder size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                </div>
+                <button
+                  onClick={() => setIsCatSheetOpen(true)}
+                  className="w-full flex items-center justify-between bg-slate-800/60 border border-white/[0.06] rounded-2xl px-4 py-3 transition-colors hover:border-white/20 active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Folder size={15} className={categoryId ? 'text-primary' : 'text-slate-600'} />
+                    <span className={`text-sm font-medium ${categoryId ? 'text-white' : 'text-slate-500'}`}>
+                      {categoryId ? categories.find(c => c.id === categoryId)?.name ?? '選擇分類' : '選擇分類'}
+                    </span>
+                  </div>
+                  <ChevronRight size={15} className="text-slate-600" />
+                </button>
               </section>
 
               {/* 精華 */}
@@ -377,6 +402,115 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
 
         </div>
       </div>
+
+      {/* ── 分類選擇 Bottom Sheet ── */}
+      {isCatSheetOpen && (
+        <div
+          className="absolute inset-0 z-[110] flex flex-col justify-end"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setIsCatSheetOpen(false)}
+        >
+          <div
+            className="bg-[#0D1525] rounded-t-3xl pb-safe overflow-hidden"
+            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 拖把 */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-white/20" />
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3">
+              <span className="text-base font-black text-white">選擇分類</span>
+              <button
+                onClick={() => { setIsCatSheetOpen(false); setIsAddCatOpen(true) }}
+                className="flex items-center gap-1 text-primary text-sm font-bold active:opacity-70 transition-opacity"
+              >
+                <Plus size={15} />
+                新增
+              </button>
+            </div>
+
+            {/* 列表 */}
+            <div className="overflow-y-auto max-h-72">
+              {/* 無分類 */}
+              <button
+                onClick={() => { setCategoryId(''); setIsCatSheetOpen(false) }}
+                className="w-full flex items-center gap-4 px-5 py-4 active:bg-white/5 transition-colors border-t border-white/[0.06]"
+              >
+                <X size={18} className={!categoryId ? 'text-primary' : 'text-slate-500'} strokeWidth={2.5} />
+                <span className={`flex-1 text-left text-base font-medium ${!categoryId ? 'text-primary' : 'text-white'}`}>無分類</span>
+                {!categoryId && (
+                  <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                    <Check size={13} className="text-[#0B1120]" strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+
+              {/* 各分類 */}
+              {categories.map(cat => {
+                const selected = categoryId === cat.id
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => { setCategoryId(cat.id); setIsCatSheetOpen(false) }}
+                    className="w-full flex items-center gap-4 px-5 py-4 active:bg-white/5 transition-colors border-t border-white/[0.06]"
+                  >
+                    <Folder size={18} className={selected ? 'text-primary' : 'text-slate-500'} />
+                    <span className={`flex-1 text-left text-base font-medium ${selected ? 'text-primary' : 'text-white'}`}>{cat.name}</span>
+                    {selected && (
+                      <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                        <Check size={13} className="text-[#0B1120]" strokeWidth={3} />
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 新增分類彈出視窗 ── */}
+      {isAddCatOpen && (
+        <div
+          className="absolute inset-0 z-[120] flex items-center justify-center px-6"
+          style={{ background: 'rgba(11,17,32,0.7)', backdropFilter: 'blur(6px)' }}
+          onClick={() => { setIsAddCatOpen(false); setNewCatName('') }}
+        >
+          <div
+            className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl p-5 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-base font-black text-white tracking-tight">新增分類</span>
+              <button
+                onClick={() => { setIsAddCatOpen(false); setNewCatName('') }}
+                className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <input
+              autoFocus
+              type="text"
+              placeholder="分類名稱"
+              value={newCatName}
+              onChange={(e) => setNewCatName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory() }}
+              className="w-full bg-slate-800/60 border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 transition-colors"
+            />
+            <button
+              onClick={handleAddCategory}
+              disabled={!newCatName.trim() || isSavingCat}
+              className="w-full py-2.5 bg-primary text-[#0B1120] rounded-xl text-sm font-black disabled:opacity-30 flex items-center justify-center gap-2 active:scale-95 transition-transform"
+            >
+              {isSavingCat ? <Loader2 size={14} className="animate-spin" /> : '新增分類'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
