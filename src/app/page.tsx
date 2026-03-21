@@ -63,6 +63,25 @@ function HomeContent() {
   const lastScrollY = useRef(0)
   const [fabVisible, setFabVisible] = useState(true)
 
+  // ── Clipboard 預讀（在 PWA 回到前景時讀取，避免點 FAB 時跳出「貼上」UI）──
+  const cachedClipboard = useRef('')
+  useEffect(() => {
+    const tryReadClipboard = async () => {
+      try {
+        const text = await navigator.clipboard.readText()
+        cachedClipboard.current = text
+      } catch {
+        cachedClipboard.current = ''
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') tryReadClipboard()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    tryReadClipboard()
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+  }, [])
+
   // ── 搜尋 Debounce ──
   useEffect(() => {
     const t = setTimeout(() => {
@@ -496,13 +515,8 @@ function HomeContent() {
 
       {/* ── FAB ── */}
       <button
-        onClick={async () => {
-          try {
-            const text = await navigator.clipboard.readText()
-            setClipboardUrl(text)
-          } catch {
-            setClipboardUrl('')
-          }
+        onClick={() => {
+          setClipboardUrl(cachedClipboard.current)
           setIsAddModalOpen(true)
         }}
         aria-label="新增收藏"
