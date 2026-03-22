@@ -105,8 +105,17 @@ function HomeContent() {
 
   // Auth guard + 初始資料
   useEffect(() => {
-    if (!authLoading && !user) router.push('/login')
-    else if (user) fetchCategories()
+    if (authLoading) return
+
+    if (!user) {
+      // 給予一個極短的緩衝，確認不是因為 Session 恢復延遲
+      const timer = setTimeout(() => {
+        if (!user) router.push('/login')
+      }, 500)
+      return () => clearTimeout(timer)
+    } else {
+      fetchCategories()
+    }
   }, [user, authLoading])
 
   // 主頁 memo 查詢
