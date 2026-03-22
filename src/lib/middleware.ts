@@ -22,7 +22,11 @@ export async function updateSession(request: NextRequest) {
             request,
           })
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              maxAge: 31536000, // 確保 iOS PWA 持久化 (1年)
+              path: '/',
+            })
           )
         },
       },
