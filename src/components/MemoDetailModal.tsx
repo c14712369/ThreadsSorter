@@ -1,17 +1,19 @@
 'use client'
 
-import { X, ExternalLink, Calendar, User, Tag, MessageCircle, Trash2, Star, Archive, Pencil } from 'lucide-react'
+import { X, ExternalLink, Calendar, User, Tag, MessageCircle, Trash2, Star, Archive, Pencil, Folder } from 'lucide-react'
 import { Button } from './ui/Button'
 import { Card } from './ui/Card'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import Image from 'next/image'
+import IconRenderer from './IconRenderer'
 
 export function MemoDetailModal({ 
   memo, 
   isOpen, 
   onClose,
   categoryName,
+  categoryIcon,
   onDelete,
   onToggleEssential,
   onToggleArchive,
@@ -21,6 +23,7 @@ export function MemoDetailModal({
   isOpen: boolean, 
   onClose: () => void,
   categoryName?: string,
+  categoryIcon?: string,
   onDelete: (id: string) => void,
   onToggleEssential: (id: string, is_essential: boolean) => void,
   onToggleArchive: (id: string, is_archived: boolean) => void,
@@ -99,7 +102,7 @@ export function MemoDetailModal({
               </div>
               {categoryName && (
                 <div className="flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">
-                  <Tag size={10} />
+                  <IconRenderer name={categoryIcon || 'Tag'} size={10} />
                   {categoryName}
                 </div>
               )}

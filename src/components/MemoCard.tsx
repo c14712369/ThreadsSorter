@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Card } from './ui/Card'
-import { Star, MessageCircle, Trash2, Archive } from 'lucide-react'
+import { Star, MessageCircle, Trash2, Archive, Tag } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
+import IconRenderer from './IconRenderer'
 
 interface MemoCardProps {
   memo: {
@@ -22,6 +23,7 @@ interface MemoCardProps {
     ai_tags?: string[]
   }
   categoryName?: string
+  categoryIcon?: string
   onEdit?: (memo: any) => void
   onToggleEssential?: (id: string, essential: boolean) => void
   onToggleArchive?: (id: string, archived: boolean) => void
@@ -29,7 +31,7 @@ interface MemoCardProps {
   isHighlightMode?: boolean
 }
 
-export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onToggleArchive, onDelete, isHighlightMode }: MemoCardProps) {
+export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onToggleEssential, onToggleArchive, onDelete, isHighlightMode }: MemoCardProps) {
   const [imgError, setImgError] = useState(false)
   const x = useMotionValue(0)
   
@@ -60,9 +62,17 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
 
         <div className="p-6 relative z-10 space-y-4">
           <div className="flex items-center justify-between opacity-60 group-hover:opacity-100 transition-opacity">
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-              @{memo.author_handle}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">
+                @{memo.author_handle}
+              </span>
+              {categoryName && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800 text-[8px] font-bold text-slate-400">
+                  <IconRenderer name={categoryIcon || 'Tag'} size={8} />
+                  <span>{categoryName}</span>
+                </div>
+              )}
+            </div>
             <Star size={12} className={cn("transition-colors", memo.is_essential ? "text-amber-500 fill-amber-500" : "text-slate-700")} />
           </div>
 
@@ -167,11 +177,17 @@ export function MemoCard({ memo, categoryName, onEdit, onToggleEssential, onTogg
 
           {/* 右側 */}
           <div className="flex-1 flex flex-col justify-center px-3.5 py-3 gap-1.5 min-w-0 overflow-hidden">
-            {/* 作者 + bio */}
+            {/* 作者 + bio + category */}
             <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-[11px] font-black text-primary shrink-0 max-w-[50%] truncate">
+              <span className="text-[11px] font-black text-primary shrink-0 max-w-[40%] truncate">
                 @{memo.author_handle}
               </span>
+              {categoryName && (
+                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-800 text-[9px] font-bold text-slate-400 shrink-0">
+                  <IconRenderer name={categoryIcon || 'Tag'} size={8} />
+                  <span className="truncate max-w-[60px]">{categoryName}</span>
+                </div>
+              )}
               {memo.author_bio && (
                 <span className="text-[10px] text-slate-600 truncate min-w-0">{memo.author_bio}</span>
               )}

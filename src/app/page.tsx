@@ -92,10 +92,9 @@ function HomeContent() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  // 篩選改變時重置頁碼並清空舊卡片，避免切換時舊資料透過遮罩露出
+  // 篩選改變時重置頁碼，但不立即清空舊卡片以減少閃爍
   useEffect(() => {
     setPage(0)
-    setMemos([])
   }, [selectedCategoryId, onlyEssential, onlyArchived])
 
   // 切頁 / 切篩選時回到最上方
@@ -120,7 +119,8 @@ function HomeContent() {
 
   // 主頁 memo 查詢
   useEffect(() => {
-    if (user && tab === 'home') fetchMemos()
+    // 判斷是否為「重大變更」（如換頁），這決定是否顯示遮罩
+    if (user && tab === 'home') fetchMemos(page !== 0)
   }, [user, tab, page, selectedCategoryId, onlyEssential, onlyArchived, searchQuery])
 
   // 分頁 tab 全量查詢
@@ -153,9 +153,10 @@ function HomeContent() {
     return Promise.race([imageLoads, timeout])
   }
 
-  const fetchMemos = async () => {
+  const fetchMemos = async (isInitialOrPageChange = false) => {
     if (!user) return
-    setIsLoading(true)
+    if (isInitialOrPageChange) setIsLoading(true)
+    
     let query = supabase
       .from('memos')
       .select('*', { count: 'exact' })
@@ -176,12 +177,13 @@ function HomeContent() {
     setTotalCount(count || 0)
 
     if (data) {
-      // 先預載圖片，全部就緒後才一次顯示所有卡片
-      await preloadImages(data)
       setMemos(data)
+      // 非阻塞預載
+      preloadImages(data)
     }
 
-    setIsLoading(false)
+    // 延遲一點點結束 loading 狀態，避免 UI 閃爍過快
+    setTimeout(() => setIsLoading(false), 100)
   }
 
   const fetchAllMemos = async (essentialOnly: boolean) => {
@@ -317,6 +319,7 @@ function HomeContent() {
             <div className="animate-in fade-in duration-300">
               <EssentialBoard
                 memos={allMemos}
+                categories={categories}
                 onDetail={setEditingMemo}
                 onDeleteMemo={handleDeleteMemo}
                 onToggleEssential={handleToggleEssential}
@@ -466,17 +469,21 @@ function HomeContent() {
               key={`${onlyEssential}-${onlyArchived}-${selectedCategoryId}-${page}`}
               className="grid gap-3 animate-in fade-in duration-200"
             >
-              {memos.map((memo) => (
-                <MemoCard
-                  key={memo.id}
-                  memo={memo}
-                  categoryName={categories.find(c => c.id === memo.category_id)?.name}
-                  onEdit={setEditingMemo}
-                  onDelete={handleDeleteMemo}
-                  onToggleEssential={handleToggleEssential}
-                  onToggleArchive={handleToggleArchive}
-                />
-              ))}
+              {memos.map((memo) => {
+                const cat = categories.find(c => c.id === memo.category_id)
+                return (
+                  <MemoCard
+                    key={memo.id}
+                    memo={memo}
+                    categoryName={cat?.name}
+                    categoryIcon={cat?.icon}
+                    onEdit={setEditingMemo}
+                    onDelete={handleDeleteMemo}
+                    onToggleEssential={handleToggleEssential}
+                    onToggleArchive={handleToggleArchive}
+                  />
+                )
+              })}
             </div>
           )}
         </div>
@@ -487,7 +494,7 @@ function HomeContent() {
         <div className="shrink-0 flex items-center justify-center gap-1 px-5 py-2 pb-3 border-t border-white/[0.04]">
           <button
             disabled={page === 0}
-            onClick={() => { setMemos([]); setPage(p => p - 1) }}
+            onClick={() => { setPage(p => p - 1) }}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
           >
             <ChevronLeft size={16} />
@@ -499,7 +506,7 @@ function HomeContent() {
             ) : (
               <button
                 key={p}
-                onClick={() => { setMemos([]); setPage((p as number) - 1) }}
+                onClick={() => { setPage((p as number) - 1) }}
                 className={cn(
                   "w-8 h-8 rounded-lg text-xs font-bold transition-colors",
                   (p as number) - 1 === page
@@ -514,7 +521,7 @@ function HomeContent() {
 
           <button
             disabled={(page + 1) * PAGE_SIZE >= totalCount}
-            onClick={() => { setMemos([]); setPage(p => p + 1) }}
+            onClick={() => { setPage(p => p + 1) }}
             className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"
           >
             <ChevronRight size={16} />

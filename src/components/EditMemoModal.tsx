@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowLeft, Loader2, Star, Trash2, ExternalLink, MessageCircle, Folder, Sparkles, RotateCcw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import IconRenderer from './IconRenderer'
 
 export function EditMemoModal({
   isOpen,
@@ -284,18 +285,23 @@ export function EditMemoModal({
               <Folder size={14} className="text-primary" strokeWidth={2.5} />
               <span className="text-sm font-black tracking-wider text-primary">分類</span>
             </div>
-            <div className="relative inline-block">
-              <select
-                className="bg-slate-800/60 border border-white/[0.06] rounded-full pl-4 pr-9 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 appearance-none transition-colors"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">未分類</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
-                ))}
-              </select>
-              <Folder size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+            <div className="flex items-center gap-3">
+              <div className="shrink-0 w-10 h-10 rounded-full bg-slate-800/60 border border-white/[0.06] flex items-center justify-center text-primary">
+                <IconRenderer name={categories.find(c => c.id === categoryId)?.icon || 'Folder'} size={20} />
+              </div>
+              <div className="relative inline-block flex-1">
+                <select
+                  className="w-full bg-slate-800/60 border border-white/[0.06] rounded-full pl-4 pr-9 py-2.5 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 appearance-none transition-colors"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <option value="">未分類</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+                <Folder size={12} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+              </div>
             </div>
           </section>
 

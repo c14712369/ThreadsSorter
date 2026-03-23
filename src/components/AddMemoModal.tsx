@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, MessageCircle, X, Plus, Check, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Link2, Loader2, Sparkles, Star, Folder, MessageCircle, X, Plus, Check, ChevronRight, ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
+import IconRenderer, { AVAILABLE_ICONS } from './IconRenderer'
+import { motion, AnimatePresence } from 'framer-motion'
 
 interface AddMemoModalProps {
   isOpen: boolean
@@ -33,6 +35,8 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
   const [isCatSheetOpen, setIsCatSheetOpen] = useState(false)
   const [isAddCatOpen, setIsAddCatOpen] = useState(false)
   const [newCatName, setNewCatName] = useState('')
+  const [newCatIcon, setNewCatIcon] = useState('Tag')
+  const [showNewIconPicker, setShowNewIconPicker] = useState(false)
   const [isSavingCat, setIsSavingCat] = useState(false)
 
   const handleAddCategory = async () => {
@@ -41,7 +45,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
     setIsSavingCat(true)
     const { data, error } = await supabase
       .from('categories')
-      .insert([{ name, user_id: user.id }])
+      .insert([{ name, user_id: user.id, icon: newCatIcon }])
       .select()
       .single()
     if (!error && data) {
@@ -49,6 +53,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       setCategoryId(data.id)
     }
     setNewCatName('')
+    setNewCatIcon('Tag')
     setIsAddCatOpen(false)
     setIsSavingCat(false)
   }
@@ -91,6 +96,8 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       setIsCatSheetOpen(false)
       setIsAddCatOpen(false)
       setNewCatName('')
+      setNewCatIcon('Tag')
+      setShowNewIconPicker(false)
     }
   }, [isOpen])
 
@@ -457,7 +464,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
                     onClick={() => { setCategoryId(cat.id); setIsCatSheetOpen(false) }}
                     className="w-full flex items-center gap-4 px-5 py-4 active:bg-white/5 transition-colors border-t border-white/[0.06]"
                   >
-                    <Folder size={18} className={selected ? 'text-primary' : 'text-slate-500'} />
+                    <IconRenderer name={cat.icon || 'Folder'} size={18} className={selected ? 'text-primary' : 'text-slate-500'} />
                     <span className={`flex-1 text-left text-base font-medium ${selected ? 'text-primary' : 'text-white'}`}>{cat.name}</span>
                     {selected && (
                       <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center">
@@ -486,21 +493,52 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
             <div className="flex items-center justify-between">
               <span className="text-base font-black text-white tracking-tight">新增分類</span>
               <button
-                onClick={() => { setIsAddCatOpen(false); setNewCatName('') }}
+                onClick={() => { setIsAddCatOpen(false); setNewCatName(''); setShowNewIconPicker(false) }}
                 className="w-7 h-7 flex items-center justify-center rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-all"
               >
                 <X size={15} />
               </button>
             </div>
-            <input
-              autoFocus
-              type="text"
-              placeholder="分類名稱"
-              value={newCatName}
-              onChange={(e) => setNewCatName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory() }}
-              className="w-full bg-slate-800/60 border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 transition-colors"
-            />
+            
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowNewIconPicker(!showNewIconPicker)}
+                className="flex items-center gap-1 bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-primary hover:bg-primary/10 transition-colors shrink-0"
+              >
+                <IconRenderer name={newCatIcon} size={16} />
+                <ChevronDown size={12} />
+              </button>
+              <input
+                autoFocus
+                type="text"
+                placeholder="分類名稱"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddCategory() }}
+                className="w-full bg-slate-800/60 border border-white/[0.08] rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 transition-colors"
+              />
+            </div>
+
+            <AnimatePresence>
+              {showNewIconPicker && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="grid grid-cols-7 gap-1 p-2 bg-slate-800 rounded-xl border border-white/10 overflow-y-auto max-h-40 no-scrollbar"
+                >
+                  {AVAILABLE_ICONS.map(iconName => (
+                    <button
+                      key={iconName}
+                      onClick={() => { setNewCatIcon(iconName); setShowNewIconPicker(false) }}
+                      className={`p-2 rounded hover:bg-slate-700 transition-colors ${newCatIcon === iconName ? 'bg-primary/20 text-primary' : 'text-slate-500'}`}
+                    >
+                      <IconRenderer name={iconName} size={18} />
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
             <button
               onClick={handleAddCategory}
               disabled={!newCatName.trim() || isSavingCat}

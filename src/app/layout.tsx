@@ -3,18 +3,18 @@ import "./globals.css";
 import Shell from "@/components/layout/Shell";
 
 export const metadata: Metadata = {
-  title: "T-memo | Threads 知識管理工具",
+  title: "Thorter | Threads 知識管理工具",
   description: "專為 Threads 設計的 PWA 知識管理工具，自動解析連結、結構化資訊與雲端同步。",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
-    title: "T-memo",
+    statusBarStyle: "black-translucent",
+    title: "Thorter",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2DD4BF",
+  themeColor: "#0B1120",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
@@ -33,6 +33,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cactus+Classical+Serif&family=Noto+Serif+TC:wght@200..900&display=swap" />
+        <link rel="apple-touch-icon" href="/icons/icon-512x512.png" />
       </head>
       <body className="antialiased">
         <Shell>{children}</Shell>

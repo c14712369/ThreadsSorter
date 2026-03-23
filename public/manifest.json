@@ -1,12 +1,18 @@
 {
-  "name": "T-memo",
-  "short_name": "T-memo",
+  "name": "Thorter",
+  "short_name": "Thorter",
   "description": "Threads 知識管理工具",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0F172A",
-  "theme_color": "#2DD4BF",
+  "background_color": "#0B1120",
+  "theme_color": "#6366F1",
   "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
     {
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
