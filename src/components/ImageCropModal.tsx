@@ -40,6 +40,8 @@ export default function ImageCropModal({
   }
 
   const handleSave = async () => {
+    if (!croppedAreaPixels) return
+
     try {
       const croppedImage = await getCroppedImg(image, croppedAreaPixels)
       onCropComplete(croppedImage)
