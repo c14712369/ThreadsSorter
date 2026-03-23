@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import * as LucideIcons from 'lucide-react'
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
