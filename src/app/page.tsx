@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { CategoryManagerModal } from '@/components/CategoryManagerModal'
 import IconRenderer from '@/components/IconRenderer'
+import ImageCropModal from '@/components/ImageCropModal'
 
 // ── 分頁號碼計算 ────────────────────────────────────────────
 function getPageRange(current: number, total: number): (number | 'dot')[] {
@@ -60,6 +61,8 @@ function HomeContent() {
   const [appIcon, setAppIcon] = useState('Zap')
   const [customAppIcon, setCustomAppIcon] = useState<string | null>(null)
   const [isAppIconModalOpen, setIsAppIconModalOpen] = useState(false)
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null)
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false)
 
   // ── Scroll container ref ──
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -67,6 +70,70 @@ function HomeContent() {
   // ── FAB scroll-hide ──
   const lastScrollY = useRef(0)
   const [fabVisible, setFabVisible] = useState(true)
+
+  const preloadImages = (data: any[]): Promise<void> => {
+    const urls = data
+      .map(m => m.preview_image)
+      .filter(url => url && !url.startsWith('data:'))
+      .map(url => `/api/image-proxy?url=${encodeURIComponent(url)}`)
+    if (urls.length === 0) return Promise.resolve()
+    const imageLoads = Promise.all(
+      urls.map(src => new Promise<void>(resolve => {
+        const img = new Image()
+        img.onload = () => resolve()
+        img.onerror = () => resolve()
+        img.src = src
+      }))
+    ).then(() => {})
+    const timeout = new Promise<void>(resolve => setTimeout(resolve, 4000))
+    return Promise.race([imageLoads, timeout])
+  }
+
+  const fetchMemos = async (isInitialOrPageChange = false) => {
+    if (!user) return
+    if (isInitialOrPageChange) setIsLoading(true)
+    let query = supabase
+      .from('memos')
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+    if (selectedCategoryId !== 'all') query = query.eq('category_id', selectedCategoryId)
+    if (onlyArchived) {
+      query = query.eq('is_archived', true)
+    } else {
+      query = query.eq('is_archived', false)
+      if (onlyEssential) query = query.eq('is_essential', true)
+    }
+    if (searchQuery) query = query.ilike('content_snippet', `%${searchQuery}%`)
+    const { data, count } = await query
+    setTotalCount(count || 0)
+    if (data) {
+      setMemos(data)
+      preloadImages(data)
+    }
+    setTimeout(() => setIsLoading(false), 100)
+  }
+
+  const fetchAllMemos = async (essentialOnly: boolean) => {
+    if (!user) return
+    setIsViewLoading(true)
+    let query = supabase.from('memos').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+    if (essentialOnly) {
+      query = query.eq('is_essential', true)
+    } else {
+      query = query.eq('is_archived', false)
+    }
+    const { data } = await query
+    if (data) setAllMemos(data)
+    setIsViewLoading(false)
+  }
+
+  const fetchCategories = async () => {
+    if (!user) return
+    const { data } = await supabase.from('categories').select('*').eq('user_id', user.id).order('name')
+    if (data) setCategories(data)
+  }
 
   // ── Clipboard 預讀 ──
   const cachedClipboard = useRef('')
@@ -141,70 +208,6 @@ function HomeContent() {
     }
   }, [user, authLoading, tab])
 
-  const preloadImages = (data: any[]): Promise<void> => {
-    const urls = data
-      .map(m => m.preview_image)
-      .filter(url => url && !url.startsWith('data:'))
-      .map(url => `/api/image-proxy?url=${encodeURIComponent(url)}`)
-    if (urls.length === 0) return Promise.resolve()
-    const imageLoads = Promise.all(
-      urls.map(src => new Promise<void>(resolve => {
-        const img = new Image()
-        img.onload = () => resolve()
-        img.onerror = () => resolve()
-        img.src = src
-      }))
-    ).then(() => {})
-    const timeout = new Promise<void>(resolve => setTimeout(resolve, 4000))
-    return Promise.race([imageLoads, timeout])
-  }
-
-  const fetchMemos = async (isInitialOrPageChange = false) => {
-    if (!user) return
-    if (isInitialOrPageChange) setIsLoading(true)
-    let query = supabase
-      .from('memos')
-      .select('*', { count: 'exact' })
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-    if (selectedCategoryId !== 'all') query = query.eq('category_id', selectedCategoryId)
-    if (onlyArchived) {
-      query = query.eq('is_archived', true)
-    } else {
-      query = query.eq('is_archived', false)
-      if (onlyEssential) query = query.eq('is_essential', true)
-    }
-    if (searchQuery) query = query.ilike('content_snippet', `%${searchQuery}%`)
-    const { data, count } = await query
-    setTotalCount(count || 0)
-    if (data) {
-      setMemos(data)
-      preloadImages(data)
-    }
-    setTimeout(() => setIsLoading(false), 100)
-  }
-
-  const fetchAllMemos = async (essentialOnly: boolean) => {
-    if (!user) return
-    setIsViewLoading(true)
-    let query = supabase.from('memos').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
-    if (essentialOnly) {
-      query = query.eq('is_essential', true)
-    } else {
-      query = query.eq('is_archived', false)
-    }
-    const { data } = await query
-    if (data) setAllMemos(data)
-    setIsViewLoading(false)
-  }
-
-  const fetchCategories = async () => {
-    if (!user) return
-    const { data } = await supabase.from('categories').select('*').eq('user_id', user.id).order('name')
-    if (data) setCategories(data)
-  }
-
   const handleDeleteMemo = async (id: string) => {
     const { error } = await supabase.from('memos').delete().eq('id', id)
     if (!error) {
@@ -261,12 +264,20 @@ function HomeContent() {
     const reader = new FileReader()
     reader.onload = (event) => {
       const base64 = event.target?.result as string
-      setCustomAppIcon(base64)
-      localStorage.setItem('thorter_custom_app_icon', base64)
-      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement
-      if (link) link.href = base64
+      setImageToCrop(base64)
+      setIsCropModalOpen(true)
     }
     reader.readAsDataURL(file)
+    // 重設 input 以便再次上傳同一張圖片
+    e.target.value = ''
+  }
+
+  const handleCropComplete = (croppedBase64: string) => {
+    setCustomAppIcon(croppedBase64)
+    localStorage.setItem('thorter_custom_app_icon', croppedBase64)
+    const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement
+    if (link) link.href = croppedBase64
+    setImageToCrop(null)
   }
 
   // ── 共用 Modals ──
@@ -276,6 +287,15 @@ function HomeContent() {
       <EditMemoModal isOpen={!!editingMemo} memo={editingMemo} onClose={() => setEditingMemo(null)} onUpdate={handleUpdateMemo} onDelete={handleDeleteMemo} />
       <CategoryManagerModal isOpen={isCatModalOpen} onClose={() => setIsCatModalOpen(false)} userId={user?.id || ''} categories={categories} onCategoriesChange={fetchCategories} />
       
+      {imageToCrop && (
+        <ImageCropModal 
+          isOpen={isCropModalOpen} 
+          image={imageToCrop} 
+          onClose={() => { setIsCropModalOpen(false); setImageToCrop(null) }} 
+          onCropComplete={handleCropComplete} 
+        />
+      )}
+
       <AnimatePresence>
         {isAppIconModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4">
