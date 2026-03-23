@@ -81,7 +81,7 @@ export default function ImageCropModal({
               </button>
             </div>
 
-            <div className="relative flex-1 bg-black/40">
+            <div className="relative flex-1 bg-black/40 min-h-[300px]">
               <Cropper
                 image={image}
                 crop={crop}
@@ -90,6 +90,7 @@ export default function ImageCropModal({
                 onCropChange={onCropChange}
                 onCropComplete={onCropCompleteInternal}
                 onZoomChange={onZoomChange}
+                objectFit="contain" // 確保圖片完整顯示在容器內
                 classes={{
                   containerClassName: 'bg-black/20',
                 }}

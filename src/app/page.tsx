@@ -172,9 +172,11 @@ function HomeContent() {
     return () => clearTimeout(t)
   }, [searchInput])
 
-  // 篩選改變時重置頁碼
+  // 篩選改變時重置頁碼並立即設為載入中
   useEffect(() => {
     setPage(0)
+    setIsLoading(true) // 立即顯示載入狀態
+    setMemos([])       // 清空舊列表，避免舊內容閃現
   }, [selectedCategoryId, onlyEssential, onlyArchived])
 
   // 切頁 / 切篩選時回到最上方
@@ -266,6 +268,7 @@ function HomeContent() {
       const base64 = event.target?.result as string
       setImageToCrop(base64)
       setIsCropModalOpen(true)
+      setIsAppIconModalOpen(false) // 自動關閉設定彈窗
     }
     reader.readAsDataURL(file)
     // 重設 input 以便再次上傳同一張圖片
