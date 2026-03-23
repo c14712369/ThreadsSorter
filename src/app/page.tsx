@@ -123,27 +123,23 @@ function HomeContent() {
       return () => clearTimeout(timer)
     } else {
       fetchCategories()
-      // 確保一登入或恢復 Session 就抓取首頁資料
-      if (tab === 'home') fetchMemos(true)
     }
   }, [user, authLoading])
 
-  // 主頁 memo 查詢 (處理分頁、搜尋、篩選改變)
+  // 統一處理首頁資料抓取 (包含初始與後續篩選變動)
   useEffect(() => {
-    if (user && tab === 'home') {
-      // 只有在非初始載入（page !== 0 或其他篩選變動）時才由這裡觸發
-      // 避免與初始載入重複抓取
-      fetchMemos(page !== 0)
+    if (!authLoading && user && tab === 'home') {
+      fetchMemos(true)
     }
-  }, [page, selectedCategoryId, onlyEssential, onlyArchived, searchQuery])
+  }, [user, authLoading, tab, page, selectedCategoryId, onlyEssential, onlyArchived, searchQuery])
 
-  // 切換 Tab 時的邏輯
+  // 切換到其他 Tab 時的邏輯
   useEffect(() => {
-    if (!user) return
-    if (tab === 'home') fetchMemos(true) // 切回主頁時重新載入
-    else if (tab === 'categories') fetchAllMemos(false)
-    else if (tab === 'essentials') fetchAllMemos(true)
-  }, [user, tab])
+    if (!authLoading && user) {
+      if (tab === 'categories') fetchAllMemos(false)
+      else if (tab === 'essentials') fetchAllMemos(true)
+    }
+  }, [user, authLoading, tab])
 
   const preloadImages = (data: any[]): Promise<void> => {
     const urls = data
