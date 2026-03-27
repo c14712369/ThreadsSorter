@@ -202,7 +202,8 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#0B1120] flex flex-col">
+    <div className="fixed inset-0 z-[100] flex justify-center items-center md:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-xl h-full md:h-[90dvh] bg-background flex flex-col md:rounded-[2.5rem] md:border md:border-white/10 md:shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom duration-300">
 
       {/* ── Header ── */}
       <div
@@ -227,7 +228,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       </div>
 
       {/* ── Scrollable Body ── */}
-      <div className="flex-1 overflow-y-auto overscroll-contain" style={{ WebkitOverflowScrolling: 'touch' } as any}>
+      <div className="flex-1 overflow-y-auto overscroll-contain no-scrollbar" style={{ WebkitOverflowScrolling: 'touch' } as any}>
         <div
           className="px-5 pt-5 space-y-6"
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 32px)' }}
@@ -550,5 +551,6 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
         </div>
       )}
     </div>
+  </div>
   )
 }

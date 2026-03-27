@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import * as cheerio from 'cheerio'
 
-const BOT_UA = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+const BOT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+const FB_UA = 'facebookexternalhit/1.1'
 
 /** 從 HTML 字串中提取第一張貼文圖（排除大頭貼）
  *  Instagram/Threads 貼文圖：t51.82787-15
@@ -29,22 +30,24 @@ export async function POST(req: Request) {
     const { url } = await req.json()
     if (!url) return NextResponse.json({ error: '無效連結' }, { status: 400 })
 
-    // 標準化網址，去掉 query string
+    // 標準化網址，加上隨機參數避免快取
     const cleanUrl = url.split('?')[0].replace('threads.com', 'threads.net')
+    const cacheBuster = `?t=${Date.now()}`
     const urlObj = new URL(cleanUrl)
     const isThreads = urlObj.hostname.includes('threads.net')
 
     // --- 策略 A & B 並行 ---
-    const embedUrl = cleanUrl.replace(/\/$/, '') + '/embed/'
+    const embedUrl = cleanUrl.replace(/\/$/, '') + '/embed/' + cacheBuster
 
     const [embedResult, mainResult] = await Promise.allSettled([
-      // 策略 A: embed 頁面（抓貼文圖）
+      // 策略 A: embed 頁面
       isThreads
-        ? fetch(embedUrl, { headers: { 'User-Agent': BOT_UA } }).then(r => r.ok ? r.text() : '')
+        ? fetch(embedUrl, { headers: { 'User-Agent': BOT_UA }, cache: 'no-store' }).then(r => r.ok ? r.text() : '')
         : Promise.resolve(''),
-      // 策略 B: 主頁面（抓 title / description / 圖片 fallback）
-      fetch(cleanUrl, {
-        headers: { 'User-Agent': BOT_UA, 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' }
+      // 策略 B: 主頁面
+      fetch(cleanUrl + cacheBuster, {
+        headers: { 'User-Agent': BOT_UA, 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' },
+        cache: 'no-store'
       }).then(r => r.ok ? r.text() : '')
     ])
 
@@ -85,8 +88,9 @@ export async function POST(req: Request) {
     let authorAvatar = ''
     if (authorHandle && isThreads) {
       try {
-        const pRes = await fetch(`https://www.threads.net/@${authorHandle}`, {
-          headers: { 'User-Agent': 'facebookexternalhit/1.1' }
+        const pRes = await fetch(`https://www.threads.net/@${authorHandle}${cacheBuster}`, {
+          headers: { 'User-Agent': FB_UA },
+          cache: 'no-store'
         })
         if (pRes.ok) {
           const profileHtml = await pRes.text()

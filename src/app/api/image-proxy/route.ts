@@ -9,15 +9,20 @@ export async function GET(request: Request) {
   }
 
   try {
-    const referer = imageUrl.includes('cdninstagram') || imageUrl.includes('fbcdn')
-      ? 'https://www.instagram.com/'
-      : 'https://www.threads.net/'
+    const isIG = imageUrl.includes('cdninstagram') || imageUrl.includes('fbcdn')
+    const referer = isIG ? 'https://www.instagram.com/' : 'https://www.threads.net/'
+    const origin = isIG ? 'https://www.instagram.com' : 'https://www.threads.net'
 
     const response = await fetch(imageUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
         'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8',
         'Referer': referer,
+        'Origin': origin,
+        'Sec-Fetch-Dest': 'image',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'cross-site',
       }
     })
 

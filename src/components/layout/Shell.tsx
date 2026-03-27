@@ -19,36 +19,15 @@ function ShellContent({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="h-[100dvh] w-full bg-background text-foreground flex flex-col md:flex-row overflow-hidden relative">
-      {/* Desktop Sidebar - 暫時停用 */}
-      {/* <aside className="hidden md:flex flex-col w-64 border-r border-slate-800 p-6 gap-8 shrink-0 h-full">
-        <div className="text-2xl font-bold text-primary tracking-tight">T-memo</div>
-        <nav className="flex flex-col gap-2 flex-1">
-          <NavItem icon={<Home size={20} />} label="主頁" href="/" active={currentTab === 'home'} />
-          <NavItem icon={<Folder size={20} />} label="分類" href="/?tab=categories" active={currentTab === 'categories'} />
-          <NavItem icon={<Star size={20} />} label="靈感牆" href="/?tab=essentials" active={currentTab === 'essentials'} />
-          <NavItem icon={<User size={20} />} label="個人檔案" href="/?tab=profile" active={currentTab === 'profile'} />
-        </nav>
-        <Button variant="ghost" className="justify-start gap-3 text-slate-400" onClick={handleSignOut}>
-          <LogOut size={20} />
-          <span>登出</span>
-        </Button>
-      </aside> */}
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-[100dvh] overflow-hidden relative">
-        <section className="flex-1 flex flex-col overflow-hidden relative">
-          {children}
-        </section>
-
-        {/* Mobile Bottom Nav - 暫時停用 */}
-        {/* <nav className="md:hidden fixed bottom-0 left-0 right-0 flex items-center justify-around p-3 border-t border-slate-800 bg-background/95 backdrop-blur-lg z-[60] pb-safe">
-          <NavItem icon={<Home size={24} />} href="/" active={currentTab === 'home'} vertical />
-          <NavItem icon={<Folder size={24} />} href="/?tab=categories" active={currentTab === 'categories'} vertical />
-          <NavItem icon={<Star size={24} />} href="/?tab=essentials" active={currentTab === 'essentials'} vertical />
-          <NavItem icon={<User size={24} />} href="/?tab=profile" active={currentTab === 'profile'} vertical />
-        </nav> */}
-      </main>
+    <div className="h-[100dvh] w-full bg-[#030712] text-foreground flex flex-col md:flex-row overflow-hidden relative">
+      {/* Main Content Container - Centered and limited width on desktop */}
+      <div className="flex-1 flex justify-center h-full">
+        <main className="w-full max-w-xl bg-background flex flex-col h-full overflow-hidden relative md:border-x md:border-white/5 md:shadow-2xl">
+          <section className="flex-1 flex flex-col overflow-hidden relative">
+            {children}
+          </section>
+        </main>
+      </div>
     </div>
   )
 }

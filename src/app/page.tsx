@@ -53,6 +53,9 @@ function HomeContent() {
   const [totalCount, setTotalCount] = useState(0)
   const PAGE_SIZE = 10
 
+  // ── 防止競態條件 ──
+  const fetchIdRef = useRef(0)
+
   // ── 分頁 Tab 用的全量資料 ──
   const [allMemos, setAllMemos] = useState<any[]>([])
   const [isViewLoading, setIsViewLoading] = useState(false)
@@ -71,48 +74,47 @@ function HomeContent() {
   const lastScrollY = useRef(0)
   const [fabVisible, setFabVisible] = useState(true)
 
-  const preloadImages = (data: any[]): Promise<void> => {
-    const urls = data
-      .map(m => m.preview_image)
-      .filter(url => url && !url.startsWith('data:'))
-      .map(url => `/api/image-proxy?url=${encodeURIComponent(url)}`)
-    if (urls.length === 0) return Promise.resolve()
-    const imageLoads = Promise.all(
-      urls.map(src => new Promise<void>(resolve => {
-        const img = new Image()
-        img.onload = () => resolve()
-        img.onerror = () => resolve()
-        img.src = src
-      }))
-    ).then(() => {})
-    const timeout = new Promise<void>(resolve => setTimeout(resolve, 4000))
-    return Promise.race([imageLoads, timeout])
-  }
-
   const fetchMemos = async (isInitialOrPageChange = false) => {
     if (!user) return
+    
+    const currentFetchId = ++fetchIdRef.current
     if (isInitialOrPageChange) setIsLoading(true)
-    let query = supabase
-      .from('memos')
-      .select('*', { count: 'exact' })
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-    if (selectedCategoryId !== 'all') query = query.eq('category_id', selectedCategoryId)
-    if (onlyArchived) {
-      query = query.eq('is_archived', true)
-    } else {
-      query = query.eq('is_archived', false)
-      if (onlyEssential) query = query.eq('is_essential', true)
+
+    try {
+      let query = supabase
+        .from('memos')
+        .select('*', { count: 'exact' })
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+      if (selectedCategoryId !== 'all') query = query.eq('category_id', selectedCategoryId)
+      if (onlyArchived) {
+        query = query.eq('is_archived', true)
+      } else {
+        query = query.eq('is_archived', false)
+        if (onlyEssential) query = query.eq('is_essential', true)
+      }
+      if (searchQuery) query = query.ilike('content_snippet', `%${searchQuery}%`)
+
+      const { data, count, error } = await query
+
+      // 如果這不是最後一次發起的請求，則放棄更新
+      if (currentFetchId !== fetchIdRef.current) return
+
+      if (error) throw error
+
+      setTotalCount(count || 0)
+      if (data) {
+        setMemos(data)
+      }
+    } catch (err) {
+      console.error('Fetch memos error:', err)
+    } finally {
+      if (currentFetchId === fetchIdRef.current) {
+        setIsLoading(false)
+      }
     }
-    if (searchQuery) query = query.ilike('content_snippet', `%${searchQuery}%`)
-    const { data, count } = await query
-    setTotalCount(count || 0)
-    if (data) {
-      setMemos(data)
-      preloadImages(data)
-    }
-    setTimeout(() => setIsLoading(false), 100)
   }
 
   const fetchAllMemos = async (essentialOnly: boolean) => {
@@ -347,14 +349,14 @@ function HomeContent() {
 
   if (tab === 'categories') {
     return (
-      <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden bg-[#0B1120]">
+      <div className="flex flex-col h-full w-full overflow-hidden bg-background">
         <div className="shrink-0 pt-12 pb-4 px-5"><h1 className="text-2xl font-black text-white tracking-tighter">分類</h1></div>
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-24 no-scrollbar">
           {isViewLoading ? (
             <div className="flex items-center justify-center py-20"><Loader2 className="animate-spin text-primary" size={32} /></div>
           ) : (
             <div className="animate-in fade-in duration-300">
-              <CategoryBoard categories={categories} memos={allMemos} onDetail={setEditingMemo} onDeleteMemo={handleDeleteMemo} onToggleEssential={handleToggleEssential} onManageCategories={() => setIsCatModalOpen(true)} />
+              <CategoryBoard categories={categories} memos={allMemos} onDetail={setEditingMemo} onUpdateMemo={handleUpdateMemo} onDeleteMemo={handleDeleteMemo} onToggleEssential={handleToggleEssential} onManageCategories={() => setIsCatModalOpen(true)} />
             </div>
           )}
         </div>
@@ -365,14 +367,14 @@ function HomeContent() {
 
   if (tab === 'essentials') {
     return (
-      <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden bg-[#0B1120]">
+      <div className="flex flex-col h-full w-full overflow-hidden bg-background">
         <div className="shrink-0 pt-12 pb-4 px-5"><h1 className="text-2xl font-black text-white tracking-tighter">靈感牆</h1></div>
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-24 no-scrollbar">
           {isViewLoading ? (
             <div className="flex items-center justify-center py-20"><Loader2 className="animate-spin text-primary" size={32} /></div>
           ) : (
             <div className="animate-in fade-in duration-300">
-              <EssentialBoard memos={allMemos} categories={categories} onDetail={setEditingMemo} onDeleteMemo={handleDeleteMemo} onToggleEssential={handleToggleEssential} />
+              <EssentialBoard memos={allMemos} categories={categories} onDetail={setEditingMemo} onUpdateMemo={handleUpdateMemo} onDeleteMemo={handleDeleteMemo} onToggleEssential={handleToggleEssential} />
             </div>
           )}
         </div>
@@ -383,7 +385,7 @@ function HomeContent() {
 
   if (tab === 'profile') {
     return (
-      <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden bg-[#0B1120]">
+      <div className="flex flex-col h-full w-full overflow-hidden bg-background">
         <div className="shrink-0 pt-12 px-5" />
         <div className="flex-1 flex flex-col items-center justify-center px-8 gap-6">
           <div className="w-20 h-20 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary overflow-hidden">
@@ -410,7 +412,7 @@ function HomeContent() {
   const hasPagination = totalCount > PAGE_SIZE
 
   return (
-    <div className="flex flex-col h-full w-full max-w-2xl mx-auto overflow-hidden relative bg-[#0B1120]">
+    <div className="flex flex-col h-full w-full overflow-hidden relative bg-background">
       <div className="shrink-0 pt-12 pb-3 px-5 space-y-3.5 z-30">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -456,7 +458,7 @@ function HomeContent() {
 
       <div className="flex-1 min-h-0 relative overflow-hidden">
         {isLoading && memos.length > 0 && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#0B1120]/75 backdrop-blur-[2px] pointer-events-none">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/75 backdrop-blur-[2px] pointer-events-none">
             <Loader2 className="animate-spin text-primary" size={28} strokeWidth={2.5} />
           </div>
         )}
@@ -479,7 +481,7 @@ function HomeContent() {
               {memos.map((memo) => {
                 const cat = categories.find(c => c.id === memo.category_id)
                 return (
-                  <MemoCard key={memo.id} memo={memo} categoryName={cat?.name} categoryIcon={cat?.icon} onEdit={setEditingMemo} onDelete={handleDeleteMemo} onToggleEssential={handleToggleEssential} onToggleArchive={handleToggleArchive} />
+                  <MemoCard key={memo.id} memo={memo} categoryName={cat?.name} categoryIcon={cat?.icon} onEdit={setEditingMemo} onUpdate={handleUpdateMemo} onDelete={handleDeleteMemo} onToggleEssential={handleToggleEssential} onToggleArchive={handleToggleArchive} />
                 )
               })}
             </div>

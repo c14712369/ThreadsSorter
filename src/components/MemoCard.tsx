@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card } from './ui/Card'
-import { Star, MessageCircle, Trash2, Archive, Tag } from 'lucide-react'
+import { Star, MessageCircle, Trash2, Archive, Tag, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { motion, useMotionValue, useTransform } from 'framer-motion'
 import IconRenderer from './IconRenderer'
+import { supabase } from '@/lib/supabase'
 
 interface MemoCardProps {
   memo: {
@@ -25,22 +26,75 @@ interface MemoCardProps {
   categoryName?: string
   categoryIcon?: string
   onEdit?: (memo: any) => void
+  onUpdate?: (memo: any) => void
   onToggleEssential?: (id: string, essential: boolean) => void
   onToggleArchive?: (id: string, archived: boolean) => void
   onDelete?: (id: string) => void
   isHighlightMode?: boolean
 }
 
-export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onToggleEssential, onToggleArchive, onDelete, isHighlightMode }: MemoCardProps) {
+export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, onToggleEssential, onToggleArchive, onDelete, isHighlightMode }: MemoCardProps) {
   const [imgError, setImgError] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const lastRefreshRef = useRef<number>(0)
   const x = useMotionValue(0)
   
   const actionOpacity = useTransform(x, [-160, -40], [1, 0])
   const actionScale = useTransform(x, [-160, -40], [1, 0.8])
 
+  // Reset imgError when memo.preview_image changes
+  useEffect(() => {
+    setImgError(false)
+  }, [memo.preview_image])
+
   const getImageUrl = (url?: string) => {
     if (!url) return null
     return `/api/image-proxy?url=${encodeURIComponent(url)}`
+  }
+
+  const handleRefreshImage = async (e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (isRefreshing) return
+    
+    // 限制頻率，避免無限循環 (10秒冷卻)
+    const now = Date.now()
+    if (now - lastRefreshRef.current < 10000) {
+      console.log('Refresh cooled down, skipping...')
+      return
+    }
+    lastRefreshRef.current = now
+
+    setIsRefreshing(true)
+    try {
+      const res = await fetch('/api/parse-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: memo.url })
+      })
+      
+      if (res.ok) {
+        const data = await res.json()
+        if (data.preview_image && data.preview_image !== memo.preview_image) {
+          // Update database
+          const { error } = await supabase
+            .from('memos')
+            .update({ preview_image: data.preview_image })
+            .eq('id', memo.id)
+          
+          if (!error && onUpdate) {
+            onUpdate({ ...memo, preview_image: data.preview_image })
+          }
+          setImgError(false)
+        } else {
+          // 如果解析出來的網址還是一樣，代表目前真的抓不到新的
+          console.warn('Image URL is still the same after refresh.')
+        }
+      }
+    } catch (err) {
+      console.error('Failed to refresh image:', err)
+    } finally {
+      setIsRefreshing(false)
+    }
   }
 
   // Highlight / Masonry Mode (Inspiration Wall)
@@ -50,11 +104,12 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onToggleEss
         className="group relative overflow-hidden cursor-pointer border-slate-800 bg-slate-900/40 hover:bg-slate-800 transition-colors hover:shadow-2xl hover:shadow-primary/10"
         onClick={() => onEdit?.(memo)}
       >
-        {memo.preview_image && (
+        {memo.preview_image && !imgError && (
           <div className="absolute inset-0 opacity-[0.07] grayscale pointer-events-none group-hover:scale-110 transition-transform duration-1000">
             <img 
               src={getImageUrl(memo.preview_image)!}
               alt="" 
+              onError={() => setImgError(true)}
               className="w-full h-full object-cover"
             />
           </div>
@@ -87,16 +142,27 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onToggleEss
               ))}
             </div>
             
-            <button 
-              onClick={(e) => {
-                e.stopPropagation()
-                if (confirm('確定要刪除這篇珍藏嗎？')) onDelete?.(memo.id)
-              }}
-              aria-label="刪除"
-            className="p-1.5 text-slate-600 hover:text-rose-400 transition-colors"
-            >
-              <Trash2 size={16} />
-            </button>
+            <div className="flex items-center gap-2">
+              {imgError && (
+                <button 
+                  onClick={handleRefreshImage}
+                  className={cn("p-1.5 text-slate-500 hover:text-primary transition-colors", isRefreshing && "animate-spin")}
+                  title="重新整理圖片"
+                >
+                  <RefreshCw size={14} />
+                </button>
+              )}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (confirm('確定要刪除這篇珍藏嗎？')) onDelete?.(memo.id)
+                }}
+                aria-label="刪除"
+                className="p-1.5 text-slate-600 hover:text-rose-400 transition-colors"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
           </div>
         </div>
       </Card>
@@ -153,21 +219,42 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onToggleEss
             if (Math.abs(x.get()) < 10) onEdit?.(memo)
           }}
         >
-          {/* Left side: Thumbnail (Use raw img to avoid next/image CORS issues) */}
-          <div className="w-32 h-32 shrink-0 bg-slate-950/50 relative overflow-hidden border-r border-slate-800">
+          {/* Left side: Thumbnail */}
+          <div className="w-32 h-32 shrink-0 bg-slate-950/50 relative overflow-hidden border-r border-slate-800 flex items-center justify-center">
             {memo.preview_image && !imgError ? (
               <img
                 src={getImageUrl(memo.preview_image)!}
                 alt="Preview"
-                onError={() => setImgError(true)}
+                onError={() => {
+                  setImgError(true)
+                  // Auto-refresh once on error if not already refreshing
+                  handleRefreshImage()
+                }}
                 className="w-full h-full object-cover grayscale-[30%] group-hover:grayscale-0 transition-[filter,transform] duration-500 group-hover:scale-105"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center opacity-20">
+              <div className="relative w-full h-full flex flex-col items-center justify-center opacity-20 group-hover:opacity-40 transition-opacity">
                 <MessageCircle size={32} />
+                {isRefreshing && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                    <RefreshCw size={24} className="animate-spin text-primary" />
+                  </div>
+                )}
               </div>
             )}
             
+            {imgError && !isRefreshing && (
+              <button 
+                onClick={handleRefreshImage}
+                className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="點擊重新解析圖片"
+              >
+                <div className="p-2 bg-slate-800 rounded-full text-white shadow-lg border border-white/10">
+                  <RefreshCw size={16} />
+                </div>
+              </button>
+            )}
+
             {memo.is_essential && (
               <div className="absolute top-2 left-2 p-1 bg-amber-500 rounded-full shadow-lg z-10">
                 <Star size={10} fill="white" className="text-white" />

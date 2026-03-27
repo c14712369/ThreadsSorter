@@ -8,6 +8,7 @@ export function CategoryBoard({
   categories, 
   memos, 
   onDetail, 
+  onUpdateMemo,
   onDeleteMemo, 
   onToggleEssential,
   onManageCategories
@@ -15,6 +16,7 @@ export function CategoryBoard({
   categories: any[], 
   memos: any[], 
   onDetail: (memo: any) => void, 
+  onUpdateMemo?: (memo: any) => void,
   onDeleteMemo: (id: string) => void, 
   onToggleEssential: (id: string, is_essential: boolean) => void,
   onManageCategories?: () => void
@@ -54,6 +56,7 @@ export function CategoryBoard({
                  categoryName={activeCat?.name}
                  categoryIcon={activeCat?.icon}
                  onEdit={onDetail}
+                 onUpdate={onUpdateMemo}
                  onDelete={onDeleteMemo}
                  onToggleEssential={onToggleEssential}
                />

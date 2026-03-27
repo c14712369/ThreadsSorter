@@ -13,12 +13,14 @@ export function EssentialBoard({
   memos, 
   categories,
   onDetail, 
+  onUpdateMemo,
   onDeleteMemo, 
   onToggleEssential 
 }: { 
   memos: any[], 
   categories: any[],
   onDetail: (memo: any) => void, 
+  onUpdateMemo?: (memo: any) => void,
   onDeleteMemo: (id: string) => void, 
   onToggleEssential: (id: string, is_essential: boolean) => void 
 }) {
@@ -42,6 +44,7 @@ export function EssentialBoard({
               categoryName={cat?.name}
               categoryIcon={cat?.icon}
               onEdit={onDetail}
+              onUpdate={onUpdateMemo}
               onDelete={onDeleteMemo}
               onToggleEssential={onToggleEssential}
               isHighlightMode={true}
