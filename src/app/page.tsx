@@ -99,13 +99,35 @@ function HomeContent() {
 
       const { data, count, error } = await query
 
-      // 如果這不是最後一次發起的請求，則放棄更新
       if (currentFetchId !== fetchIdRef.current) return
-
       if (error) throw error
 
       setTotalCount(count || 0)
+      
       if (data) {
+        // ── 圖片預載邏輯 ──
+        if (isInitialOrPageChange && data.length > 0) {
+          const imageUrls = data
+            .map(m => m.preview_image)
+            .filter(Boolean)
+            .map(url => {
+              if (url.includes('supabase.co')) return url
+              return `/api/image-proxy?url=${encodeURIComponent(url)}`
+            })
+
+          if (imageUrls.length > 0) {
+            await Promise.race([
+              Promise.all(imageUrls.map(src => new Promise<void>(resolve => {
+                const img = new Image()
+                img.onload = () => resolve()
+                img.onerror = () => resolve()
+                img.src = src
+              }))),
+              new Promise<void>(resolve => setTimeout(resolve, 3000)) // 最多等 3 秒，避免卡死
+            ])
+          }
+        }
+        
         setMemos(data)
       }
     } catch (err) {
@@ -491,11 +513,11 @@ function HomeContent() {
 
       {hasPagination && (
         <div className="shrink-0 flex items-center justify-center gap-1 px-5 py-2 pb-3 border-t border-white/[0.04]">
-          <button disabled={page === 0} onClick={() => { setPage(p => p - 1) }} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"><ChevronLeft size={16} /></button>
+          <button disabled={page === 0 || isLoading} onClick={() => { setPage(p => p - 1) }} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"><ChevronLeft size={16} /></button>
           {getPageRange(page, totalPages).map((p, i) => p === 'dot' ? (<span key={`dot-${i}`} className="w-8 h-8 flex items-center justify-center text-slate-700 text-xs select-none">…</span>) : (
-            <button key={p} onClick={() => { setPage((p as number) - 1) }} className={cn("w-8 h-8 rounded-lg text-xs font-bold transition-colors", (p as number) - 1 === page ? "bg-primary text-primary-foreground shadow-md shadow-primary/30" : "text-slate-500 hover:text-white hover:bg-white/5")}>{p}</button>
+            <button key={p} disabled={isLoading} onClick={() => { setPage((p as number) - 1) }} className={cn("w-8 h-8 rounded-lg text-xs font-bold transition-colors", (p as number) - 1 === page ? "bg-primary text-primary-foreground shadow-md shadow-primary/30" : "text-slate-500 hover:text-white hover:bg-white/5")}>{p}</button>
           ))}
-          <button disabled={(page + 1) * PAGE_SIZE >= totalCount} onClick={() => { setPage(p => p + 1) }} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"><ChevronRight size={16} /></button>
+          <button disabled={(page + 1) * PAGE_SIZE >= totalCount || isLoading} onClick={() => { setPage(p => p + 1) }} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:text-white disabled:opacity-20 transition-colors"><ChevronRight size={16} /></button>
         </div>
       )}
 
