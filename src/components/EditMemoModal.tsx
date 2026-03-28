@@ -154,6 +154,28 @@ export function EditMemoModal({ isOpen, memo, onClose, onUpdate, onDelete }: Edi
             </div>
           </section>
 
+          {/* AI 摘要 (Read-only reference) */}
+          {(memo.ai_summary || (memo.ai_tags && memo.ai_tags.length > 0)) && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
+                <span className="text-sm font-black tracking-wider text-primary">AI 摘要記錄</span>
+              </div>
+              <div className="rounded-2xl bg-primary/5 border border-primary/10 px-4 py-3 space-y-2.5">
+                {memo.ai_summary && <p className="text-slate-200 text-sm italic leading-relaxed">{memo.ai_summary}</p>}
+                {memo.ai_tags && memo.ai_tags.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {memo.ai_tags.map((tag: string) => (
+                      <span key={tag} className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {/* 內容編輯 */}
           <section className="space-y-2">
             <div className="flex items-center gap-2">

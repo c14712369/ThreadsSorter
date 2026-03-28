@@ -159,10 +159,15 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
           t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase())
         )
       )
-      // 直接套用，不詢問
+      
       setAiSummary(data.summary)
       setAiTags(data.tags || [])
       if (matchedCat?.id) setCategoryId(matchedCat.id)
+
+      // 如果原始內容太短或為空，且 AI 摘要有內容，則自動把 AI 摘要填入標題欄位
+      if ((!parsedData.content_snippet || parsedData.content_snippet.length < 5) && data.summary) {
+        setPreview((prev: any) => ({ ...prev, content_snippet: data.summary }))
+      }
     } catch {
       // Silent fail
     } finally {
