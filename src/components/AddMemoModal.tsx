@@ -137,7 +137,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
   }
 
   const generateAI = async (parsedData: any) => {
-    if (!parsedData?.content_snippet) return
+    if (!parsedData) return
     setIsGeneratingAI(true)
     try {
       const res = await fetch('/api/generate-summary', {
