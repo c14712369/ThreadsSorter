@@ -49,6 +49,8 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, o
 
   const getImageUrl = (url?: string) => {
     if (!url) return null
+    // 如果已經是 Supabase 的網址，就不需要經過 proxy
+    if (url.includes('supabase.co')) return url
     return `/api/image-proxy?url=${encodeURIComponent(url)}`
   }
 

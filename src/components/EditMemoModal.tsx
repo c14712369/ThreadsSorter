@@ -39,6 +39,7 @@ export function EditMemoModal({ isOpen, memo, onClose, onUpdate, onDelete }: Edi
 
   const getImageUrl = (url?: string) => {
     if (!url) return null
+    if (url.includes('supabase.co')) return url
     return `/api/image-proxy?url=${encodeURIComponent(url)}`
   }
 

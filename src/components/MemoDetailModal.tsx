@@ -36,6 +36,7 @@ export function MemoDetailModal({
 
   const getImageUrl = (url?: string) => {
     if (!url) return null
+    if (url.includes('supabase.co')) return url
     return `/api/image-proxy?url=${encodeURIComponent(url)}`
   }
 
