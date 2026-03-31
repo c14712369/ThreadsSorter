@@ -122,12 +122,12 @@ export function EditMemoModal({ isOpen, memo, onClose, onUpdate, onDelete }: Edi
           {/* Preview (read-only) */}
           <section className="rounded-2xl bg-slate-800/40 border border-white/[0.06] overflow-hidden">
             {memo.preview_image && !imgError ? (
-              <div className="w-full h-52 bg-slate-800 overflow-hidden">
+              <div className="w-full h-56 bg-slate-800">
                 <img
                   src={getImageUrl(memo.preview_image)!}
                   referrerPolicy="no-referrer"
                   onError={() => setImgError(true)}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-contain"
                 />
               </div>
             ) : (
@@ -180,7 +180,7 @@ export function EditMemoModal({ isOpen, memo, onClose, onUpdate, onDelete }: Edi
           <section className="space-y-2">
             <div className="flex items-center gap-2">
               <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
-              <span className="text-sm font-black tracking-wider text-primary">內容擷取</span>
+              <span className="text-sm font-black tracking-wider text-primary">標題</span>
             </div>
             <textarea
               placeholder="內容..."

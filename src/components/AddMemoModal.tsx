@@ -192,6 +192,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
     }])
 
     if (insertError) {
+      console.error('insert error:', JSON.stringify(insertError))
       setError(insertError.message)
       setIsSaving(false)
       return
@@ -280,12 +281,12 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
           {!isLoading && preview && (
             <section className="rounded-2xl bg-slate-800/40 border border-white/[0.06] overflow-hidden">
               {preview.preview_image && !imgError ? (
-                <div className="w-full h-52 bg-slate-800 overflow-hidden">
+                <div className="w-full h-56 bg-slate-800">
                   <img
                     src={getImageUrl(preview.preview_image)!}
                     alt="Preview"
                     onError={() => setImgError(true)}
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                 </div>
               ) : (
@@ -345,7 +346,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
               {/* 標題 */}
               <section className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-primary font-mono">T</span>
+                  <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
                   <span className="text-sm font-black tracking-wider text-primary">標題</span>
                 </div>
                 <textarea

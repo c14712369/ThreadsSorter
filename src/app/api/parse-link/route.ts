@@ -44,8 +44,16 @@ async function fetchViaJina(url: string): Promise<{ content: string; description
     const content: string = json.data?.content || ''
 
     // 從 content 中找出所有 CDN 圖片（貼文圖，排除頭像 -19）
-    const imgMatches: string[] = (content.match(/https:\/\/scontent[^\s)"\]]+/g) || [])
-      .filter((u: string) => !u.includes('t51.82787-19') && !u.includes('rsrc.php'))
+    const allUrls = content.match(/https:\/\/[^\s)"\]]+/g) || []
+    const imgMatches: string[] = allUrls
+      .filter((u: string) => {
+        if (u.includes('rsrc.php')) return false
+        // 貼文圖（-15 格式）
+        if (/t51\.\d+-15/.test(u)) return true
+        // 連結預覽縮圖（fbcdn emg1）
+        if (u.includes('fbcdn.net/emg1')) return true
+        return false
+      })
       .map((u: string) => u.replace(/&amp;/g, '&'))
 
     return { content, description, images: imgMatches }
@@ -120,7 +128,9 @@ export async function POST(req: Request) {
       const firstLine = jina.content.split('\n').find(l => l.replace(/[#\[\]()]/g, '').trim().length > 10) || ''
       contentSnippet = firstLine.replace(/^#+\s*/, '').trim()
     }
-    if (contentSnippet.length > 50) contentSnippet = contentSnippet.substring(0, 50) + '...'
+    contentSnippet = contentSnippet.replace(/\s+/g, ' ').trim()
+    const chars = Array.from(contentSnippet)
+    if (chars.length > 150) contentSnippet = chars.slice(0, 150).join('') + '...'
 
     // 圖片：優先貼文圖，沒有才用頭像
     let previewImage: string | null = null

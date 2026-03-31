@@ -226,11 +226,19 @@ function HomeContent() {
     }
   }, [user, authLoading, tab, page, selectedCategoryId, onlyEssential, onlyArchived, searchQuery])
 
-  // 切換到其他 Tab 時的邏輯
+  // 首頁載入完成後，背景預載其他 tab 的資料
+  useEffect(() => {
+    if (!authLoading && user && tab === 'home') {
+      fetchAllMemos(false) // 分類 tab
+      fetchAllMemos(true)  // 精華 tab
+    }
+  }, [user, authLoading])
+
+  // 切換到其他 Tab 時的邏輯（allMemos 已有資料就不重新抓）
   useEffect(() => {
     if (!authLoading && user) {
-      if (tab === 'categories') fetchAllMemos(false)
-      else if (tab === 'essentials') fetchAllMemos(true)
+      if (tab === 'categories' && allMemos.length === 0) fetchAllMemos(false)
+      else if (tab === 'essentials' && allMemos.length === 0) fetchAllMemos(true)
     }
   }, [user, authLoading, tab])
 
@@ -480,7 +488,7 @@ function HomeContent() {
 
       <div className="flex-1 min-h-0 relative overflow-hidden">
         {isLoading && memos.length > 0 && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/75 backdrop-blur-[2px] pointer-events-none">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/75 backdrop-blur-[2px] pointer-events-none">
             <Loader2 className="animate-spin text-primary" size={28} strokeWidth={2.5} />
           </div>
         )}
