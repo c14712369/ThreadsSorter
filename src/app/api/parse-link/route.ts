@@ -6,55 +6,51 @@ import crypto from 'crypto'
 const BOT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
 const FB_UA = 'facebookexternalhit/1.1'
 
-/** 從 HTML 字串中提取第一張貼文圖（排除大頭貼） */
-function extractPostImage(html: string): string {
-  const cdnMatches = html.match(/https:\/\/scontent[^"' )\\]+?t51\.82787-15[^"' )\\]+/g)
-  if (cdnMatches && cdnMatches.length > 0) {
-    return cdnMatches[0].replace(/&amp;/g, '&').replace(/\\u0026/g, '&').replace(/\\/g, '')
-  }
-
-  const fbcdnMatches = html.match(/https:\/\/[^"'\\]+?\.fbcdn\.net\/[^"'\\]+/g)
-  if (fbcdnMatches) {
-    const postImg = fbcdnMatches.find(u => u.includes('-15/') && !u.includes('-19/') && !u.includes('profile'))
-    if (postImg) return postImg.replace(/\\u0026/g, '&').replace(/\\/g, '')
-  }
-
-  return ''
-}
-
 async function uploadToSupabase(imageUrl: string): Promise<string | null> {
   try {
-    const response = await fetch(imageUrl, {
-      headers: { 'User-Agent': BOT_UA }
-    })
+    const response = await fetch(imageUrl, { headers: { 'User-Agent': BOT_UA } })
     if (!response.ok) return null
 
     const buffer = await response.arrayBuffer()
     const contentType = response.headers.get('content-type') || 'image/jpeg'
-    const extension = contentType.split('/')[1] || 'jpg'
-    
-    // 使用 URL 的 hash 作為檔名，避免重複上傳同一張圖
+    const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg'
     const hash = crypto.createHash('md5').update(imageUrl).digest('hex')
-    const fileName = `${hash}.${extension}`
+    const fileName = `${hash}.${ext}`
 
     const supabase = await createClient()
-    const { data, error } = await supabase.storage
+    const { error } = await supabase.storage
       .from('memos')
-      .upload(fileName, buffer, {
-        contentType,
-        upsert: true
-      })
-
+      .upload(fileName, buffer, { contentType, upsert: true })
     if (error) throw error
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('memos')
-      .getPublicUrl(fileName)
-
+    const { data: { publicUrl } } = supabase.storage.from('memos').getPublicUrl(fileName)
     return publicUrl
-  } catch (err) {
-    console.error('Storage upload error:', err)
+  } catch (err: any) {
+    console.error('uploadToSupabase error:', err?.message || err)
     return null
+  }
+}
+
+/** 用 Jina AI Reader 取得 Threads 貼文內文（突破 JS 渲染限制） */
+async function fetchViaJina(url: string): Promise<{ content: string; description: string; images: string[] }> {
+  try {
+    const res = await fetch(`https://r.jina.ai/${url}`, {
+      headers: { 'Accept': 'application/json' },
+    })
+    if (!res.ok) return { content: '', description: '', images: [] }
+    const json = await res.json()
+
+    const description: string = json.data?.description || ''
+    const content: string = json.data?.content || ''
+
+    // 從 content 中找出所有 CDN 圖片（貼文圖，排除頭像 -19）
+    const imgMatches: string[] = (content.match(/https:\/\/scontent[^\s)"\]]+/g) || [])
+      .filter((u: string) => !u.includes('t51.82787-19') && !u.includes('rsrc.php'))
+      .map((u: string) => u.replace(/&amp;/g, '&'))
+
+    return { content, description, images: imgMatches }
+  } catch {
+    return { content: '', description: '', images: [] }
   }
 }
 
@@ -63,103 +59,89 @@ export async function POST(req: Request) {
     const { url } = await req.json()
     if (!url) return NextResponse.json({ error: '無效連結' }, { status: 400 })
 
-    const cleanUrl = url.split('?')[0].replace('threads.com', 'threads.net')
-    const cacheBuster = `?t=${Date.now()}`
+    const cleanUrl = url.split('?')[0]
     const urlObj = new URL(cleanUrl)
-    const isThreads = urlObj.hostname.includes('threads.net')
+    const isThreads = urlObj.hostname.includes('threads.net') || urlObj.hostname.includes('threads.com')
+    const isIG = urlObj.hostname.includes('instagram.com')
 
-    const embedUrl = cleanUrl.replace(/\/$/, '') + '/embed/' + cacheBuster
-
-    const [embedResult, mainResult] = await Promise.allSettled([
-      isThreads
-        ? fetch(embedUrl, { headers: { 'User-Agent': BOT_UA }, cache: 'no-store' }).then(r => r.ok ? r.text() : '')
-        : Promise.resolve(''),
-      fetch(cleanUrl + cacheBuster, {
-        headers: { 'User-Agent': BOT_UA, 'Accept-Language': 'zh-TW,zh;q=0.9,en;q=0.8' },
-        cache: 'no-store'
-      }).then(r => r.ok ? r.text() : '')
-    ])
-
-    const embedHtml = embedResult.status === 'fulfilled' ? embedResult.value : ''
-    const mainHtml  = mainResult.status  === 'fulfilled' ? mainResult.value  : ''
-
-    let previewImage = extractPostImage(embedHtml)
-    let title = ''
-    let description = ''
-
-    if (mainHtml) {
-      const $ = cheerio.load(mainHtml)
-      title       = $('meta[property="og:title"]').attr('content') || $('title').text() || ''
-      description = $('meta[property="og:description"]').attr('content') || ''
-
-      if (!previewImage) previewImage = extractPostImage(mainHtml)
-      if (!previewImage) {
-        const ogImg = $('meta[property="og:image"]').attr('content') || ''
-        if (ogImg && !ogImg.includes('t51.2885-19') && !ogImg.includes('-19/')) {
-          previewImage = ogImg
-        }
-      }
+    if (!isThreads && !isIG) {
+      return NextResponse.json({ error: '僅支援 Threads 或 Instagram 連結' }, { status: 400 })
     }
 
-    // 嘗試上傳到 Supabase Storage
-    if (previewImage) {
-      const storageUrl = await uploadToSupabase(previewImage)
-      if (storageUrl) previewImage = storageUrl
-    }
+    // 從 URL 解析作者 handle
+    const pathParts = urlObj.pathname.split('/')
+    const handlePart = pathParts.find(p => p.startsWith('@'))
+    const authorHandle = handlePart ? handlePart.replace('@', '') : '未知作者'
 
-    let authorHandle = ''
-    const handleMatch = title.match(/@([a-zA-Z0-9._]+)/)
-    if (handleMatch) {
-      authorHandle = handleMatch[1]
-    } else {
-      const parts = urlObj.pathname.split('/')
-      const hp = parts.find(p => p.startsWith('@'))
-      if (hp) authorHandle = hp.replace('@', '')
-    }
-
-    let authorBio = ''
-    let authorAvatar = ''
-    if (authorHandle && isThreads) {
-      try {
-        const pRes = await fetch(`https://www.threads.net/@${authorHandle}${cacheBuster}`, {
+    // 並行：Jina 抓內文 + 抓作者 bio + 抓頭像
+    const [jinaResult, profileResult] = await Promise.allSettled([
+      fetchViaJina(cleanUrl),
+      (async () => {
+        const profileDomain = isIG ? 'instagram.com' : 'threads.com'
+        const pRes = await fetch(`https://www.${profileDomain}/@${authorHandle}`, {
           headers: { 'User-Agent': FB_UA },
-          cache: 'no-store'
+          redirect: 'follow',
         })
-        if (pRes.ok) {
-          const profileHtml = await pRes.text()
-          const $p = cheerio.load(profileHtml)
-          const raw = $p('meta[property="og:description"]').attr('content') || ''
+        if (!pRes.ok) return { bio: '', avatar: '' }
+        const html = await pRes.text()
+        const $ = cheerio.load(html)
+
+        // Bio
+        const raw = $('meta[property="og:description"]').attr('content') || ''
+        const isLoginPrompt = raw.includes('Join Threads') || raw.toLowerCase().includes('log in') || raw.toLowerCase().includes('sign up')
+        let bio = ''
+        if (!isLoginPrompt && raw) {
           const parts = raw.split('•')
           if (parts.length >= 3) {
-            const bioRaw = parts.slice(2).join('•')
-            const bioClean = bioRaw.replace(/\s*See the latest\b.*/i, '').trim()
-            authorBio = bioClean || `${parts[0].trim()} · ${parts[1].trim()}`
+            bio = parts.slice(2).join('•').replace(/\s*See the latest\b.*/i, '').trim()
+              || `${parts[0].trim()} · ${parts[1].trim()}`
           } else {
-            authorBio = raw.replace(/\s*See the latest\b.*/i, '').trim()
+            bio = raw.replace(/\s*See the latest\b.*/i, '').trim()
           }
-          const ogImg = $p('meta[property="og:image"]').attr('content') || ''
-          if (ogImg) authorAvatar = ogImg
         }
-      } catch (e) {}
+
+        // Avatar
+        const ogImg = $('meta[property="og:image"]').attr('content')?.replace(/&amp;/g, '&') || ''
+        const avatar = ogImg && !ogImg.includes('rsrc.php') ? ogImg : ''
+
+        return { bio, avatar }
+      })()
+    ])
+
+    const jina = jinaResult.status === 'fulfilled' ? jinaResult.value : { content: '', description: '', images: [] }
+    const profile = profileResult.status === 'fulfilled' ? profileResult.value : { bio: '', avatar: '' }
+
+    const authorBio = profile.bio || ''
+
+    // 貼文內文：優先用 Jina description（最乾淨），再 fallback content 開頭
+    let contentSnippet = jina.description || ''
+    if (!contentSnippet && jina.content) {
+      // 取第一段（去掉 markdown 格式）
+      const firstLine = jina.content.split('\n').find(l => l.replace(/[#\[\]()]/g, '').trim().length > 10) || ''
+      contentSnippet = firstLine.replace(/^#+\s*/, '').trim()
     }
+    if (contentSnippet.length > 50) contentSnippet = contentSnippet.substring(0, 50) + '...'
 
-    description = description.trim().replace(/\s+/g, ' ')
-    if (description.length > 50) description = description.substring(0, 50) + '...'
+    // 圖片：優先貼文圖，沒有才用頭像
+    let previewImage: string | null = null
+    const postImages = jina.images
+    const candidateUrl = postImages.length > 0 ? postImages[0] : profile.avatar || ''
 
-    if (!previewImage && authorAvatar) {
-      const avatarStorageUrl = await uploadToSupabase(authorAvatar)
-      previewImage = avatarStorageUrl || authorAvatar
+    if (candidateUrl) {
+      const storageUrl = await uploadToSupabase(candidateUrl)
+      previewImage = storageUrl || candidateUrl
     }
 
     return NextResponse.json({
-      author_handle: authorHandle || '未知作者',
-      author_bio: authorBio || '',
-      content_snippet: description || '',
+      author_handle: authorHandle,
+      author_bio: authorBio,
+      content_snippet: contentSnippet,
       preview_image: previewImage,
       url: cleanUrl
     })
 
   } catch (error: any) {
+    console.error('parse-link error:', error)
     return NextResponse.json({ error: '解析失敗' }, { status: 500 })
   }
 }

@@ -127,7 +127,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setPreview(data)
-      // 解析完自動觸發 AI
+      // 解析完自動觸發 AI 生成摘要
       generateAI(data)
     } catch (err: any) {
       setError(err.message || '解析失敗')
