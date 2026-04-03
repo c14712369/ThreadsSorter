@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Card } from './ui/Card'
-import { Star, MessageCircle, Trash2, Archive, Tag, RefreshCw } from 'lucide-react'
+import { Star, MessageCircle, Trash2, Archive, Tag, RefreshCw, Loader2, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { motion, useMotionValue, useTransform } from 'framer-motion'
+import { motion, useMotionValue, useTransform, AnimatePresence } from 'framer-motion'
 import IconRenderer from './IconRenderer'
 import { supabase } from '@/lib/supabase'
 
@@ -41,6 +41,34 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, o
   
   const actionOpacity = useTransform(x, [-160, -40], [1, 0])
   const actionScale = useTransform(x, [-160, -40], [1, 0.8])
+
+  const isParsing = !memo.author_handle
+
+  // 背景嘗試補齊資料
+  useEffect(() => {
+    if (isParsing) {
+      let isMounted = true
+      const runParse = async () => {
+        try {
+          const res = await fetch('/api/parse-and-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: memo.id, url: memo.url })
+          })
+          if (res.ok && isMounted) {
+            const data = await res.json()
+            if (data.success && data.memo && onUpdate) {
+              onUpdate({ ...memo, ...data.memo })
+            }
+          }
+        } catch (error) {
+          console.error("Background parse failed", error)
+        }
+      }
+      runParse()
+      return () => { isMounted = false }
+    }
+  }, [isParsing, memo.id, memo.url, onUpdate])
 
   // Reset imgError when memo.preview_image changes
   useEffect(() => {
@@ -223,7 +251,12 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, o
         >
           {/* Left side: Thumbnail */}
           <div className="w-32 h-32 shrink-0 bg-slate-950/50 relative overflow-hidden border-r border-slate-800 flex items-center justify-center">
-            {memo.preview_image && !imgError ? (
+            {isParsing ? (
+              <div className="relative w-full h-full flex flex-col items-center justify-center bg-slate-900 overflow-hidden">
+                 <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite]" />
+                 <Sparkles className="animate-pulse text-primary/60" size={28} />
+              </div>
+            ) : memo.preview_image && !imgError ? (
               <img
                 src={getImageUrl(memo.preview_image)!}
                 alt="Preview"
@@ -265,27 +298,57 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, o
           </div>
 
           {/* 右側 */}
-          <div className="flex-1 flex flex-col justify-center px-3.5 py-3 gap-1.5 min-w-0 overflow-hidden">
-            {/* 作者 + bio + category */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-[11px] font-black text-primary shrink-0 max-w-[40%] truncate">
-                @{memo.author_handle}
-              </span>
-              {categoryName && (
-                <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-800 text-[9px] font-bold text-slate-400 shrink-0">
-                  <IconRenderer name={categoryIcon || 'Tag'} size={8} />
-                  <span className="truncate max-w-[60px]">{categoryName}</span>
+          <div className="flex-1 flex flex-col justify-center px-3.5 py-3 gap-1.5 min-w-0 overflow-hidden relative">
+            {isParsing ? (
+              <AnimatePresence>
+                <motion.div 
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }} 
+                  exit={{ opacity: 0 }}
+                  className="space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-16 h-4 bg-slate-800 rounded animate-pulse" />
+                    {categoryName && (
+                      <div className="w-12 h-4 bg-slate-800 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="w-full h-3 bg-slate-800/80 rounded animate-pulse" />
+                    <div className="w-3/4 h-3 bg-slate-800/60 rounded animate-pulse" />
+                  </div>
+                </motion.div>
+                {/* 若有註解，即使解析中也能疊加上去 */}
+                {memo.personal_note && (
+                   <p className="text-sm font-medium text-slate-400 leading-snug line-clamp-1 mt-1">
+                     {memo.personal_note}
+                   </p>
+                )}
+              </AnimatePresence>
+            ) : (
+              <>
+                {/* 作者 + bio + category */}
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[11px] font-black text-primary shrink-0 max-w-[40%] truncate">
+                    @{memo.author_handle}
+                  </span>
+                  {categoryName && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-800 text-[9px] font-bold text-slate-400 shrink-0">
+                      <IconRenderer name={categoryIcon || 'Tag'} size={8} />
+                      <span className="truncate max-w-[60px]">{categoryName}</span>
+                    </div>
+                  )}
+                  {memo.author_bio && (
+                    <span className="text-[10px] text-slate-600 truncate min-w-0">{memo.author_bio}</span>
+                  )}
                 </div>
-              )}
-              {memo.author_bio && (
-                <span className="text-[10px] text-slate-600 truncate min-w-0">{memo.author_bio}</span>
-              )}
-            </div>
 
-            {/* 內文（2 行）*/}
-            <p className="text-sm font-medium text-slate-200 leading-snug line-clamp-2">
-              {memo.content_snippet || memo.ai_summary || memo.personal_note}
-            </p>
+                {/* 內文（2 行）*/}
+                <p className="text-sm font-medium text-slate-200 leading-snug line-clamp-2">
+                  {memo.content_snippet || memo.ai_summary || memo.personal_note}
+                </p>
+              </>
+            )}
           </div>
         </Card>
       </motion.div>

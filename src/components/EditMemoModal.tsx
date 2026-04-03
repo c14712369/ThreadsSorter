@@ -120,38 +120,47 @@ export function EditMemoModal({ isOpen, memo, onClose, onUpdate, onDelete }: Edi
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 32px)' }}
         >
           {/* Preview (read-only) */}
-          <section className="rounded-2xl bg-slate-800/40 border border-white/[0.06] overflow-hidden">
-            {memo.preview_image && !imgError ? (
-              <div className="w-full h-56 bg-slate-800">
-                <img
-                  src={getImageUrl(memo.preview_image)!}
-                  referrerPolicy="no-referrer"
-                  onError={() => setImgError(true)}
-                  className="w-full h-full object-contain"
-                />
+          <section className="rounded-2xl bg-slate-800/40 border border-white/[0.06] overflow-hidden relative">
+            {!memo.author_handle ? (
+              <div className="w-full h-56 flex flex-col items-center justify-center gap-4 bg-slate-900/80 animate-pulse">
+                <Loader2 size={36} className="text-primary/70 animate-spin" />
+                <span className="text-primary/70 text-xs font-bold tracking-widest uppercase">正在提取原文資訊...</span>
               </div>
             ) : (
-              <div className="w-full h-32 bg-slate-800/80 flex items-center justify-center text-slate-700">
-                <MessageCircle size={40} />
-              </div>
+              <>
+                {memo.preview_image && !imgError ? (
+                  <div className="w-full h-56 bg-slate-800">
+                    <img
+                      src={getImageUrl(memo.preview_image)!}
+                      referrerPolicy="no-referrer"
+                      onError={() => setImgError(true)}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full h-32 bg-slate-800/80 flex items-center justify-center text-slate-700">
+                    <MessageCircle size={40} />
+                  </div>
+                )}
+                <div className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20 tracking-wider">
+                      {isThreadsSrc ? 'Threads' : 'Instagram'}
+                    </span>
+                    <button
+                      onClick={() => window.open(memo.url, '_blank', 'noopener,noreferrer')}
+                      className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-primary transition-colors"
+                    >
+                      <ExternalLink size={11} /> 查看原文
+                    </button>
+                  </div>
+                  <p className="text-white text-sm font-semibold leading-snug">
+                    @{memo.author_handle}
+                    {memo.author_bio && <span className="text-slate-500 font-normal ml-1.5 opacity-60">· {memo.author_bio}</span>}
+                  </p>
+                </div>
+              </>
             )}
-            <div className="p-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black bg-primary/10 text-primary border border-primary/20 tracking-wider">
-                  {isThreadsSrc ? 'Threads' : 'Instagram'}
-                </span>
-                <button
-                  onClick={() => window.open(memo.url, '_blank', 'noopener,noreferrer')}
-                  className="flex items-center gap-1 text-[11px] text-slate-500 hover:text-primary transition-colors"
-                >
-                  <ExternalLink size={11} /> 查看原文
-                </button>
-              </div>
-              <p className="text-white text-sm font-semibold leading-snug">
-                @{memo.author_handle}
-                {memo.author_bio && <span className="text-slate-500 font-normal ml-1.5 opacity-60">· {memo.author_bio}</span>}
-              </p>
-            </div>
           </section>
 
           {/* AI 摘要 (Read-only reference) */}

@@ -176,20 +176,28 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
   }
 
   const handleSave = async () => {
-    if (!user || !preview) return
+    const targetUrl = url || (preview?.url)
+    if (!user || !targetUrl || !isSupportedUrl(targetUrl)) return
     setIsSaving(true)
     setError('')
 
-    const { error: insertError } = await supabase.from('memos').insert([{
+    const payload: any = {
       user_id: user.id,
-      ...preview,
-      url: url || preview.url,
+      url: targetUrl,
       category_id: categoryId || null,
       personal_note: personalNote || null,
       is_essential: isEssential,
-      ai_summary: aiSummary || null,
       ai_tags: aiTags
-    }])
+    }
+
+    if (preview) {
+      Object.assign(payload, preview)
+    }
+    if (aiSummary) {
+      payload.ai_summary = aiSummary
+    }
+
+    const { error: insertError } = await supabase.from('memos').insert([payload])
 
     if (insertError) {
       console.error('insert error:', JSON.stringify(insertError))
@@ -226,7 +234,7 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
         <h1 className="text-lg font-black text-white tracking-tight">快速新增</h1>
         <button
           onClick={handleSave}
-          disabled={!preview || isSaving}
+          disabled={!url || !isSupportedUrl(url) || isSaving}
           className="px-5 py-2 bg-primary text-[#0B1120] rounded-full text-sm font-black disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1.5 active:scale-95 transition-transform"
         >
           {isSaving ? <Loader2 size={14} className="animate-spin" /> : '儲存'}
@@ -342,19 +350,21 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
 
           {/* ─── Form fields (shown after parse) ─── */}
           {!isLoading && preview && (
+            <section className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
+                <span className="text-sm font-black tracking-wider text-primary">標題</span>
+              </div>
+              <textarea
+                className="w-full bg-slate-800/60 border border-white/[0.06] rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-none leading-relaxed min-h-[80px] transition-colors"
+                value={preview.content_snippet}
+                onChange={(e) => setPreview({ ...preview, content_snippet: e.target.value })}
+              />
+            </section>
+          )}
+
+          {url && isSupportedUrl(url) && (
             <>
-              {/* 標題 */}
-              <section className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={14} className="text-primary" strokeWidth={2.5} />
-                  <span className="text-sm font-black tracking-wider text-primary">標題</span>
-                </div>
-                <textarea
-                  className="w-full bg-slate-800/60 border border-white/[0.06] rounded-2xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 resize-none leading-relaxed min-h-[80px] transition-colors"
-                  value={preview.content_snippet}
-                  onChange={(e) => setPreview({ ...preview, content_snippet: e.target.value })}
-                />
-              </section>
 
               {/* 註解 */}
               <section className="space-y-2">
