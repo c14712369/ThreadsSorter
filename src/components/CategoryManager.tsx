@@ -192,7 +192,7 @@ export function CategoryManager({
           <input
             type="text"
             placeholder="輸入新分類名稱..."
-            className="flex-1 bg-transparent border-none rounded-lg px-3 py-2 text-sm text-white focus:outline-none placeholder:text-slate-600"
+            className="flex-1 min-w-0 bg-transparent border-none rounded-lg px-3 py-2 text-sm text-white focus:outline-none placeholder:text-slate-600"
             value={newCatName}
             onChange={(e) => setNewCatName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}

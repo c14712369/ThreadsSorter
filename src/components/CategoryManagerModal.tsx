@@ -37,7 +37,7 @@ export function CategoryManagerModal({
       </div>
 
       {/* Scrollable Body */}
-      <div className="flex-1 overflow-y-auto overscroll-contain">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
         <div
           className="px-5 pt-5"
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 32px)' }}
