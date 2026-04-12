@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# 個人與單次執行腳本 (防止機密意外上傳)
+scripts/
+*.mjs
 # typescript
 *.tsbuildinfo
 next-env.d.ts

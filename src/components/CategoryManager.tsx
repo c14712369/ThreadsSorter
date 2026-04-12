@@ -197,14 +197,14 @@ export function CategoryManager({
             onChange={(e) => setNewCatName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
           />
-          <Button
-            size="sm"
+          <button
             onClick={handleAddCategory}
             disabled={isAdding || !newCatName.trim()}
-            className="rounded-lg shrink-0"
+            aria-label="新增分類"
+            className="shrink-0 w-10 h-10 flex items-center justify-center rounded-lg bg-violet-500 text-white font-medium transition-all hover:bg-violet-400 active:scale-95 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed"
           >
-            {isAdding ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
-          </Button>
+            {isAdding ? <Loader2 className="animate-spin" size={18} /> : <Plus size={20} strokeWidth={2.5} />}
+          </button>
         </div>
 
         <AnimatePresence>
