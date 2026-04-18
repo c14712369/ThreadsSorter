@@ -510,8 +510,29 @@ function HomeContent() {
             <div key={`${onlyEssential}-${onlyArchived}-${selectedCategoryId}-${page}`} className="grid gap-3 animate-in fade-in duration-200">
               {memos.map((memo) => {
                 const cat = categories.find(c => c.id === memo.category_id)
+                const suggestedCategories = !memo.category_id && memo.ai_tags
+                  ? categories.filter(c => memo.ai_tags?.includes(`[CAT]${c.id}`)).map(c => ({ id: c.id, name: c.name, icon: c.icon }))
+                  : undefined
+
                 return (
-                  <MemoCard key={memo.id} memo={memo} categoryName={cat?.name} categoryIcon={cat?.icon} onEdit={setEditingMemo} onUpdate={handleUpdateMemo} onDelete={handleDeleteMemo} onToggleEssential={handleToggleEssential} onToggleArchive={handleToggleArchive} />
+                  <MemoCard 
+                    key={memo.id} 
+                    memo={memo} 
+                    categoryName={cat?.name} 
+                    categoryIcon={cat?.icon} 
+                    suggestedCategories={suggestedCategories}
+                    onSelectCategory={async (memoId, categoryId) => {
+                      const { error } = await supabase.from('memos').update({ category_id: categoryId }).eq('id', memoId)
+                      if (!error) {
+                        handleUpdateMemo({ ...memo, category_id: categoryId })
+                      }
+                    }}
+                    onEdit={setEditingMemo} 
+                    onUpdate={handleUpdateMemo} 
+                    onDelete={handleDeleteMemo} 
+                    onToggleEssential={handleToggleEssential} 
+                    onToggleArchive={handleToggleArchive} 
+                  />
                 )
               })}
             </div>

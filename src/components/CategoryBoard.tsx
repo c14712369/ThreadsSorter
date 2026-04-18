@@ -3,6 +3,7 @@ import { MemoCard } from './MemoCard'
 import { Folder, ChevronLeft, LayoutGrid, Tag } from 'lucide-react'
 import { Button } from './ui/Button'
 import IconRenderer from './IconRenderer'
+import { supabase } from '@/lib/supabase'
 
 export function CategoryBoard({ 
   categories, 
@@ -49,18 +50,31 @@ export function CategoryBoard({
           {filteredMemos.length === 0 ? (
              <div className="text-center py-10 text-slate-500">此分類暫無內容</div>
           ) : (
-             filteredMemos.map(memo => (
-               <MemoCard 
-                 key={memo.id}
-                 memo={memo} 
-                 categoryName={activeCat?.name}
-                 categoryIcon={activeCat?.icon}
-                 onEdit={onDetail}
-                 onUpdate={onUpdateMemo}
-                 onDelete={onDeleteMemo}
-                 onToggleEssential={onToggleEssential}
-               />
-             ))
+            filteredMemos.map(memo => {
+              const suggestedCategories = !memo.category_id && memo.ai_tags
+                ? categories.filter(c => memo.ai_tags?.includes(`[CAT]${c.id}`)).map(c => ({ id: c.id, name: c.name, icon: c.icon }))
+                : undefined
+
+              return (
+                <MemoCard
+                  key={memo.id}
+                  memo={memo}
+                  categoryName={activeCat?.name}
+                  categoryIcon={activeCat?.icon}
+                  suggestedCategories={suggestedCategories}
+                  onSelectCategory={async (memoId, categoryId) => {
+                    const { error } = await supabase.from('memos').update({ category_id: categoryId }).eq('id', memoId)
+                    if (!error) {
+                      onUpdateMemo?.({ ...memo, category_id: categoryId })
+                    }
+                  }}
+                  onEdit={onDetail}
+                  onUpdate={onUpdateMemo}
+                  onDelete={onDeleteMemo}
+                  onToggleEssential={onToggleEssential}
+                />
+              )
+            })
           )}
         </div>
       </div>

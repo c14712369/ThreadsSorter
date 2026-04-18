@@ -182,8 +182,33 @@ export async function POST(req: Request) {
     // AI summary
     const aiResult = await generateSummary(cleanUrl, contentSnippet, authorHandle)
 
+    // Keywords matching user categories
+    const supabase = await createClient()
+    let finalCategoryId = null
+
+    if (id) {
+      const { data: memo } = await supabase.from('memos').select('user_id, category_id').eq('id', id).single()
+      if (memo && memo.user_id) {
+        const { data: categories } = await supabase.from('categories').select('*').eq('user_id', memo.user_id)
+        if (categories && categories.length > 0) {
+          const fullText = `${jina.content || ''} ${jina.description || ''} ${aiResult.summary || ''} ${(aiResult.tags || []).join(' ')}`.toLowerCase()
+          const matched = categories.filter(cat => fullText.includes(cat.name.toLowerCase()))
+          
+          if (!memo.category_id) {
+            if (matched.length === 1) {
+              finalCategoryId = matched[0].id
+            } else if (matched.length > 1) {
+              // Store matched category IDs in ai_tags with a prefix so UI can pick them up
+              const matchedPrefixes = matched.map(m => `[CAT]${m.id}`)
+              aiResult.tags = Array.from(new Set([...(aiResult.tags || []), ...matchedPrefixes]))
+            }
+          }
+        }
+      }
+    }
+
     // Update the DB record
-    const updateData = {
+    const updateData: any = {
       author_handle: authorHandle,
       author_bio: authorBio,
       content_snippet: contentSnippet || aiResult.summary || '',
@@ -191,8 +216,11 @@ export async function POST(req: Request) {
       ai_summary: aiResult.summary,
       ai_tags: aiResult.tags || []
     }
+    
+    if (finalCategoryId) {
+      updateData.category_id = finalCategoryId
+    }
 
-    const supabase = await createClient()
     const { error: updateError } = await supabase.from('memos').update(updateData).eq('id', id)
 
     if (updateError) throw updateError

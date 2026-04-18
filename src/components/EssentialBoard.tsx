@@ -1,5 +1,6 @@
 import { MemoCard } from './MemoCard'
 import { Sparkles, ArrowRight } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 interface EssentialBoardProps {
   memos: any[]
@@ -37,17 +38,28 @@ export function EssentialBoard({
     <div className="columns-1 md:columns-2 gap-4 space-y-4 pb-10">
       {memos.map((memo) => {
         const cat = categories.find(c => c.id === memo.category_id)
+        const suggestedCategories = !memo.category_id && memo.ai_tags
+          ? categories.filter(c => memo.ai_tags?.includes(`[CAT]${c.id}`)).map(c => ({ id: c.id, name: c.name, icon: c.icon }))
+          : undefined
+
         return (
           <div key={memo.id} className="break-inside-avoid shadow-2xl hover:-translate-y-1 transition-transform duration-300">
-            <MemoCard 
-              memo={memo} 
+            <MemoCard
+              memo={memo}
               categoryName={cat?.name}
               categoryIcon={cat?.icon}
+              suggestedCategories={suggestedCategories}
+              onSelectCategory={async (memoId, categoryId) => {
+                const { error } = await supabase.from('memos').update({ category_id: categoryId }).eq('id', memoId)
+                if (!error) {
+                  onUpdateMemo?.({ ...memo, category_id: categoryId })
+                }
+              }}
               onEdit={onDetail}
               onUpdate={onUpdateMemo}
               onDelete={onDeleteMemo}
               onToggleEssential={onToggleEssential}
-              isHighlightMode={true}
+              isHighlightMode
             />
           </div>
         )

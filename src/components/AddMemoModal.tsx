@@ -154,15 +154,28 @@ export function AddMemoModal({ isOpen, onClose, onSuccess, initialUrl }: AddMemo
 
       const { data: cats } = await supabase.from('categories').select('*')
       const allCats = cats || []
-      const matchedCat = allCats.find((c: any) =>
-        data.tags?.some((t: string) =>
-          t.toLowerCase().includes(c.name.toLowerCase()) || c.name.toLowerCase().includes(t.toLowerCase())
-        )
-      )
+      
+      // 比對 AI 標籤與內文片段，尋找所有匹配的分類
+      const fullContentForMatching = `${parsedData.content_snippet || ''} ${data.summary || ''} ${(data.tags || []).join(' ')}`.toLowerCase()
+      const matchedCats = allCats.filter((c: any) => {
+        const catName = c.name.toLowerCase()
+        // 內文包含分類名，或 AI 標籤包含/被包含於分類名
+        return fullContentForMatching.includes(catName) || 
+               data.tags?.some((t: string) => t.toLowerCase().includes(catName) || catName.includes(t.toLowerCase()))
+      })
       
       setAiSummary(data.summary)
-      setAiTags(data.tags || [])
-      if (matchedCat?.id) setCategoryId(matchedCat.id)
+      
+      if (matchedCats.length === 1) {
+        setCategoryId(matchedCats[0].id)
+        setAiTags(data.tags || [])
+      } else if (matchedCats.length > 1) {
+        setCategoryId('') // 有多個匹配，不預設，讓使用者在卡片選
+        const catTags = matchedCats.map(c => `[CAT]${c.id}`)
+        setAiTags(Array.from(new Set([...(data.tags || []), ...catTags])))
+      } else {
+        setAiTags(data.tags || [])
+      }
 
       // 如果原始內容太短或為空，且 AI 摘要有內容，則自動把 AI 摘要填入標題欄位
       if ((!parsedData.content_snippet || parsedData.content_snippet.length < 5) && data.summary) {

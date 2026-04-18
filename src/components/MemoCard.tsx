@@ -25,6 +25,8 @@ interface MemoCardProps {
   }
   categoryName?: string
   categoryIcon?: string
+  suggestedCategories?: { id: string, name: string, icon?: string }[]
+  onSelectCategory?: (memoId: string, categoryId: string) => void
   onEdit?: (memo: any) => void
   onUpdate?: (memo: any) => void
   onToggleEssential?: (id: string, essential: boolean) => void
@@ -33,7 +35,7 @@ interface MemoCardProps {
   isHighlightMode?: boolean
 }
 
-export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, onToggleEssential, onToggleArchive, onDelete, isHighlightMode }: MemoCardProps) {
+export function MemoCard({ memo, categoryName, categoryIcon, suggestedCategories, onSelectCategory, onEdit, onUpdate, onToggleEssential, onToggleArchive, onDelete, isHighlightMode }: MemoCardProps) {
   const [imgError, setImgError] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const lastRefreshRef = useRef<number>(0)
@@ -167,7 +169,7 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, o
 
           <div className="flex items-center justify-between pt-2">
             <div className="flex gap-2 flex-wrap">
-              {memo.ai_tags && memo.ai_tags.slice(0, 2).map(tag => (
+              {memo.ai_tags && memo.ai_tags.filter(tag => !tag.startsWith('[CAT]')).slice(0, 2).map(tag => (
                 <span key={tag} className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">#{tag}</span>
               ))}
             </div>
@@ -347,6 +349,23 @@ export function MemoCard({ memo, categoryName, categoryIcon, onEdit, onUpdate, o
                 <p className="text-sm font-medium text-slate-200 leading-snug line-clamp-2">
                   {memo.content_snippet || memo.ai_summary || memo.personal_note}
                 </p>
+
+                {/* 推薦分類 */}
+                {!memo.category_id && suggestedCategories && suggestedCategories.length > 0 && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 bg-primary/10 rounded-lg px-2 py-1.5 border border-primary/20" onClick={e => e.stopPropagation()}>
+                    <span className="text-[10px] text-primary/80 font-bold flex items-center gap-1"><Sparkles size={10} /> 推薦分類</span>
+                    {suggestedCategories.map(cat => (
+                      <button
+                        key={cat.id}
+                        onClick={(e) => { e.stopPropagation(); onSelectCategory?.(memo.id, cat.id) }}
+                        className="px-2 py-0.5 rounded-full bg-primary/20 text-primary-foreground text-[10px] font-bold hover:bg-primary/40 active:scale-95 transition-all flex items-center gap-1"
+                      >
+                        <IconRenderer name={cat.icon || 'Tag'} size={8} />
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </>
             )}
           </div>
